@@ -25,3 +25,6 @@ logs/*
 # Operating system
 .DS_Store
 Thumbs.db
+# Local development files
+main.py
+logs/
