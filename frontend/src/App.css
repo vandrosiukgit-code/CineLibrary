@@ -265,6 +265,59 @@
   cursor: pointer;
 }
 
+.library-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 210px;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.library-controls input,
+.library-controls select,
+.personal-actions select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.library-controls input:focus,
+.library-controls select:focus,
+.personal-actions select:focus {
+  border-color: var(--accent);
+}
+
+.library-message {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  font-size: 12px;
+}
+
+.error-message {
+  border-color: #7c4343;
+  color: #e6a2a2;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .empty-state {
   min-height: 230px;
   padding: 35px 20px;
@@ -749,6 +802,37 @@
   text-align: right;
 }
 
+.personal-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.personal-actions button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.personal-actions button:hover {
+  border-color: var(--accent);
+}
+
+.personal-actions label {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
 .movie-detail-tags {
   display: flex;
   flex-wrap: wrap;
@@ -1012,6 +1096,17 @@
     margin-top: 32px;
   }
 
+  .library-controls {
+    grid-template-columns: 1fr;
+    gap: 9px;
+    margin-bottom: 16px;
+  }
+
+  .library-controls input,
+  .library-controls select {
+    min-height: 44px;
+  }
+
   .section-heading {
     align-items: flex-start;
     margin-bottom: 16px;
@@ -1182,6 +1277,15 @@
 
   .personal-rating-block strong {
     font-size: 12px;
+  }
+
+  .personal-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .personal-actions label {
+    grid-column: auto;
+    grid-template-columns: 1fr;
   }
 
   /* Карточка актёра / режиссёра */

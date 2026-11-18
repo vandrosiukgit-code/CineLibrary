@@ -1,0 +1,113 @@
+{
+  "sourceFile": "D:\\КИНО\\folders.txt",
+  "totalUniqueMovies": 48,
+  "usage": "Copy one object from batches and send it as the POST /api/agents/movie-librarian-1/research request body.",
+  "batches": [
+    {
+      "movies": [
+        "Девушка с жемчужной серёжкой (Girl with a Pearl Earring, 2003)",
+        "Полночь в Париже (Midnight in Paris, 2011)",
+        "Амели (Le Fabuleux Destin d'Amélie Poulain, 2001)",
+        "Le Peuple Migrateur (2001)",
+        "Julie & Julia (2009)",
+        "Little Women (2019)",
+        "Любовь сквозь время (2014)",
+        "Magic in the Moonlight (2014)",
+        "Письма к Джульетте (2010)",
+        "Roman Holiday (1953)"
+      ]
+    },
+    {
+      "movies": [
+        "The Agony and the Ecstasy (1965)",
+        "The Secret Garden (2020)",
+        "Under the Tuscan Sun (2003)",
+        "Анжелика, маркиза ангелов (1964)",
+        "Клуб любителей книг и пирогов из картофельных очистков (2018)",
+        "Пряности и страсти",
+        "Dr. Strangelove (1964)",
+        "Сны Акиры Куросавы (1990)",
+        "Бойфренд из будущего (About Time, 2013)",
+        "Невероятная жизнь Уолтера Митти"
+      ]
+    },
+    {
+      "movies": [
+        "La grande bellezza (2013)",
+        "Working Girl (1988)",
+        "Завтрак у Тиффани (Breakfast at Tiffany's, 1961)",
+        "Хороший год (A Good Year, 2006)",
+        "Римские приключения (To Rome with Love, 2012)",
+        "Отель «Мэриголд»: Лучший из экзотических (The Best Exotic Marigold Hotel, 2011)",
+        "Отель «Гранд Будапешт» (The Grand Budapest Hotel, 2014)",
+        "Повар на колесах (Chef, 2014)",
+        "Достать ножи (Knives Out, 2019)",
+        "Девятые врата (The Ninth Gate, 1999)"
+      ]
+    },
+    {
+      "movies": [
+        "Ангелы и демоны (Angels & Demons, 2009)",
+        "Gosford Park",
+        "Cyrano de Bergerac (1990)",
+        "Salmon Fishing in the Yemen (2011)",
+        "Стажёр (The Intern, 2015)",
+        "Пятый элемент (The Fifth Element, 1997)",
+        "Люди в чёрном (Men in Black, 1997)",
+        "Контакт (Contact, 1997)",
+        "Комната с видом (A Room with a View, 1985)",
+        "Прибытие (Arrival, 2016)"
+      ]
+    },
+    {
+      "movies": [
+        "Интерстеллар (Interstellar, 2014)",
+        "Звёздная пыль (Stardust, 2007)",
+        "Шестое чувство (The Sixth Sense, 1999)",
+        "Практическая магия (Practical Magic, 1998)",
+        "Марсианин (The Martian, 2015)",
+        "Миссис Харрис едет в Париж (Mrs. Harris Goes to Paris, 2022)",
+        "Синг-стрит (Sing Street, 2016)",
+        "1+1 (Intouchables, 2011)"
+      ]
+    }
+  ],
+  "unresolvedEntries": [
+    {
+      "raw": "Avatar - The Last Airbender BDRip 720p",
+      "reason": "May be a television series or a film; the entry has no year."
+    },
+    {
+      "raw": "Счастливый случай",
+      "reason": "The title is ambiguous and has no original title or year."
+    },
+    {
+      "raw": "ATK_BDRemux_1080_by_Tehnar71.mkv.!qB",
+      "reason": "The release filename does not contain a recognizable movie title."
+    },
+    {
+      "raw": "Live",
+      "reason": "The entry is too ambiguous to identify as a movie."
+    }
+  ],
+  "excludedNonMovieEntries": [
+    "Our Great National Parks (2022)",
+    "Planet Earth II",
+    "Планета Земля",
+    "Планета Земля: будущее",
+    "Тайны британских замков",
+    "Planet Earth III (2023)",
+    "Великие музеи мира (2011–2013)",
+    "Civilisations (2018)",
+    "BBC Америка (2025)",
+    "Seven Worlds, One Planet (2019)",
+    "Blue Planet II",
+    "Frozen Planet II (2022)",
+    "Жизнь на нашей планете",
+    "Зелёная планета",
+    "Крошечный мир",
+    "update.bat",
+    "update_list.ps1",
+    "Избранное"
+  ]
+}

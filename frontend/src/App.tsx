@@ -1,7 +1,13 @@
 
 import { useEffect, useState } from 'react'
 import './App.css'
-import { movies, people } from './data/movies'
+import {
+  loadMovies,
+  saveUserData,
+  type LibraryFilter,
+  type MovieView,
+} from './data/movieApi'
+import type { MovieCredit, MovieUserDataUpdate } from './data/movieCatalog'
 
 const menuItems = [
   { icon: '⌂', label: 'Главная' },
@@ -21,14 +27,40 @@ const availabilityLabels = {
 
 function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [movies, setMovies] = useState<MovieView[]>([])
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<LibraryFilter>('all')
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selectedMovie, setSelectedMovie] = useState<MovieView | null>(null)
+  const [selectedPerson, setSelectedPerson] = useState<MovieCredit | null>(null)
 
-  const [selectedMovie, setSelectedMovie] = useState<
-    (typeof movies)[number] | null
-  >(null)
+  const closeMovie = () => {
+    setSelectedPerson(null)
+    setSelectedMovie(null)
+  }
 
-  const [selectedPerson, setSelectedPerson] = useState<
-    (typeof people)[number] | null
-  >(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setIsLoading(true)
+      setError('')
+      loadMovies(search, filter, controller.signal)
+        .then(setMovies)
+        .catch((requestError: unknown) => {
+          if (requestError instanceof DOMException && requestError.name === 'AbortError') {
+            return
+          }
+          setError('Не удалось подключиться к базе фильмов. Запустите backend.')
+        })
+        .finally(() => setIsLoading(false))
+    }, 200)
+
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [search, filter])
 
   useEffect(() => {
     document.body.style.overflow = selectedMovie ? 'hidden' : ''
@@ -39,18 +71,12 @@ function App() {
   }, [selectedMovie])
 
   useEffect(() => {
-    if (!selectedMovie) {
-      setSelectedPerson(null)
-    }
-  }, [selectedMovie])
-
-  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (selectedPerson) {
           setSelectedPerson(null)
         } else if (selectedMovie) {
-          setSelectedMovie(null)
+          closeMovie()
         }
       }
     }
@@ -62,15 +88,33 @@ function App() {
     }
   }, [selectedMovie, selectedPerson])
 
-  const director = selectedMovie
-    ? people.find((person) => person.id === selectedMovie.directorId)
-    : null
+  const director = selectedMovie?.director ?? null
+  const actors = selectedMovie?.actors ?? []
 
-  const actors = selectedMovie
-    ? people.filter((person) =>
-        selectedMovie.actorIds.includes(person.id),
+  const applyUserData = async (
+    movie: MovieView,
+    changes: MovieUserDataUpdate,
+  ) => {
+    try {
+      const updatedMovie = await saveUserData(movie.id, changes)
+      setMovies((currentMovies) =>
+        currentMovies.map((item) =>
+          item.id === updatedMovie.id ? updatedMovie : item,
+        ),
       )
-    : []
+      setSelectedMovie(updatedMovie)
+      setError('')
+    } catch {
+      setError('Не удалось сохранить личные отметки.')
+    }
+  }
+
+  const selectMenuItem = (index: number) => {
+    if (index === 2) setFilter('watched')
+    else if (index === 3) setFilter('wishlist')
+    else if (index <= 1) setFilter('all')
+    setIsMenuOpen(false)
+  }
 
   return (
     <div className="app-shell">
@@ -92,9 +136,15 @@ function App() {
         <nav className="navigation">
           {menuItems.map((item, index) => (
             <button
-              className={`nav-item ${index === 0 ? 'active' : ''}`}
+              className={`nav-item ${
+                (filter === 'all' && index === 0) ||
+                (filter === 'watched' && index === 2) ||
+                (filter === 'wishlist' && index === 3)
+                  ? 'active'
+                  : ''
+              }`}
               key={item.label}
-              onClick={() => setIsMenuOpen(false)}
+              onClick={() => selectMenuItem(index)}
             >
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
@@ -166,6 +216,41 @@ function App() {
             </button>
           </div>
 
+          <div className="library-controls">
+            <label className="search-field">
+              <span className="visually-hidden">Поиск фильмов</span>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Название фильма"
+              />
+            </label>
+
+            <select
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as LibraryFilter)}
+              aria-label="Фильтр библиотеки"
+            >
+              <option value="all">Все фильмы</option>
+              <option value="watched">Просмотренные</option>
+              <option value="wishlist">Список желаний</option>
+              <option value="available">На диске</option>
+              <option value="downloading">Скачиваются</option>
+              <option value="missing">Нет на диске</option>
+            </select>
+          </div>
+
+          {error && <div className="library-message error-message">{error}</div>}
+
+          {isLoading && (
+            <div className="library-message">Загрузка библиотеки…</div>
+          )}
+
+          {!isLoading && !error && movies.length === 0 && (
+            <div className="library-message">Фильмы не найдены.</div>
+          )}
+
           <div className="movie-grid">
             {movies.map((movie) => (
               <article
@@ -181,13 +266,15 @@ function App() {
                     className={`movie-poster status-${movie.availability}`}
                   >
                     <img
-                      src={movie.poster}
+                      src={movie.poster ?? undefined}
                       alt={movie.title}
                     />
 
-                    <div className="movie-rating">
-                      ★ {movie.rating.toFixed(1)}
-                    </div>
+                    {movie.rating !== null && (
+                      <div className="movie-rating">
+                        ★ {movie.rating.toFixed(1)}
+                      </div>
+                    )}
 
                     {movie.isNew && (
                       <div className="movie-new">
@@ -229,7 +316,7 @@ function App() {
       {selectedMovie && (
         <div
           className="movie-modal-overlay"
-          onClick={() => setSelectedMovie(null)}
+          onClick={closeMovie}
         >
           <div
             className="movie-modal"
@@ -240,7 +327,7 @@ function App() {
           >
             <button
               className="movie-modal-close"
-              onClick={() => setSelectedMovie(null)}
+              onClick={closeMovie}
               aria-label="Закрыть карточку"
             >
               ×
@@ -250,7 +337,7 @@ function App() {
               <div className="movie-modal-poster-wrap">
                 <img
                   className="movie-modal-poster"
-                  src={selectedMovie.poster}
+                  src={selectedMovie.poster ?? undefined}
                   alt={selectedMovie.title}
                 />
 
@@ -301,11 +388,13 @@ function App() {
                   <span>{selectedMovie.genre}</span>
                 </div>
 
-                <div className="movie-modal-rating">
-                  <span>★</span>
-                  {selectedMovie.rating.toFixed(1)}
-                  <small>Рейтинг фильма</small>
-                </div>
+                {selectedMovie.rating !== null && (
+                  <div className="movie-modal-rating">
+                    <span>★</span>
+                    {selectedMovie.rating.toFixed(1)}
+                    <small>Рейтинг IMDb</small>
+                  </div>
+                )}
 
                 <div className="movie-modal-genres">
                   {(selectedMovie.genres || [selectedMovie.genre]).map(
@@ -337,7 +426,7 @@ function App() {
                       className="movie-person-link"
                       onClick={() => setSelectedPerson(director)}
                     >
-                      {director.name}
+                      {director.displayName}
                     </button>
                   ) : (
                     <p>Информация о режиссёре отсутствует.</p>
@@ -356,7 +445,7 @@ function App() {
                           key={actor.id}
                           onClick={() => setSelectedPerson(actor)}
                         >
-                          {actor.name}
+                          {actor.displayName}
                         </button>
                       ))}
                     </div>
@@ -385,6 +474,55 @@ function App() {
                   <strong>
                     {selectedMovie.watched ? 'Да' : 'Нет'}
                   </strong>
+                </div>
+
+                <div className="personal-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyUserData(selectedMovie, {
+                        watched: !selectedMovie.watched,
+                      })
+                    }
+                  >
+                    {selectedMovie.watched
+                      ? 'Отметить непросмотренным'
+                      : 'Отметить просмотренным'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyUserData(selectedMovie, {
+                        inWishlist: !selectedMovie.inWishlist,
+                      })
+                    }
+                  >
+                    {selectedMovie.inWishlist
+                      ? 'Убрать из желаний'
+                      : 'Добавить в желания'}
+                  </button>
+
+                  <label>
+                    <span>Моя оценка</span>
+                    <select
+                      value={selectedMovie.personalRating ?? ''}
+                      onChange={(event) =>
+                        applyUserData(selectedMovie, {
+                          personalRating: event.target.value
+                            ? Number(event.target.value)
+                            : null,
+                        })
+                      }
+                    >
+                      <option value="">Без оценки</option>
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <option value={rating} key={rating}>
+                          {rating} из 5
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
 
                 <div className="personal-rating-block">
@@ -438,9 +576,9 @@ function App() {
             role="dialog"
             aria-modal="true"
             aria-label={
-              selectedPerson.role === 'director'
-                ? `Карточка режиссёра ${selectedPerson.name}`
-                : `Карточка актёра ${selectedPerson.name}`
+              selectedPerson.creditType === 'director'
+                ? `Карточка режиссёра ${selectedPerson.displayName}`
+                : `Карточка актёра ${selectedPerson.displayName}`
             }
             onClick={(event) => event.stopPropagation()}
           >
@@ -453,12 +591,12 @@ function App() {
             </button>
 
             <div className="eyebrow">
-              {selectedPerson.role === 'director'
+              {selectedPerson.creditType === 'director'
                 ? 'РЕЖИССЁР'
                 : 'АКТЁР'}
             </div>
 
-            <h2>{selectedPerson.name}</h2>
+            <h2>{selectedPerson.displayName}</h2>
 
             <p>
               Справочная карточка. Состав информации определим позже.
