@@ -1,5 +1,5 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import { movies, people } from './data/movies'
 
@@ -21,9 +21,46 @@ const availabilityLabels = {
 
 function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+
   const [selectedMovie, setSelectedMovie] = useState<
     (typeof movies)[number] | null
   >(null)
+
+  const [selectedPerson, setSelectedPerson] = useState<
+    (typeof people)[number] | null
+  >(null)
+
+  useEffect(() => {
+    document.body.style.overflow = selectedMovie ? 'hidden' : ''
+
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [selectedMovie])
+
+  useEffect(() => {
+    if (!selectedMovie) {
+      setSelectedPerson(null)
+    }
+  }, [selectedMovie])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (selectedPerson) {
+          setSelectedPerson(null)
+        } else if (selectedMovie) {
+          setSelectedMovie(null)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedMovie, selectedPerson])
 
   const director = selectedMovie
     ? people.find((person) => person.id === selectedMovie.directorId)
@@ -209,15 +246,46 @@ function App() {
               ×
             </button>
 
-            <div className="movie-modal-header">
-              <img
-                className="movie-modal-poster"
-                src={selectedMovie.poster}
-                alt={selectedMovie.title}
-              />
+            <div className="movie-modal-top">
+              <div className="movie-modal-poster-wrap">
+                <img
+                  className="movie-modal-poster"
+                  src={selectedMovie.poster}
+                  alt={selectedMovie.title}
+                />
 
-              <div className="movie-modal-heading">
-                <div className="eyebrow">ИНФОРМАЦИЯ О ФИЛЬМЕ</div>
+                <div
+                  className={`movie-modal-status status-${selectedMovie.availability}`}
+                >
+                  <span className="availability-dot" />
+                  {availabilityLabels[selectedMovie.availability]}
+                </div>
+
+                <div className="movie-modal-flags">
+                  {selectedMovie.watched && (
+                    <span className="modal-flag watched-flag">
+                      ✓ Просмотрен
+                    </span>
+                  )}
+
+                  {selectedMovie.inWishlist && (
+                    <span className="modal-flag wishlist-flag">
+                      ♡ В списке желаний
+                    </span>
+                  )}
+
+                  {selectedMovie.isNew && (
+                    <span className="modal-flag new-flag">
+                      NEW
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="movie-modal-summary">
+                <div className="eyebrow">
+                  ИНФОРМАЦИЯ О ФИЛЬМЕ
+                </div>
 
                 <h2>{selectedMovie.title}</h2>
 
@@ -227,46 +295,19 @@ function App() {
                   </p>
                 )}
 
-                <p className="movie-modal-year">
-                  {selectedMovie.year}
-                </p>
+                <div className="movie-modal-meta">
+                  <span>{selectedMovie.year}</span>
+                  <span className="meta-separator">•</span>
+                  <span>{selectedMovie.genre}</span>
+                </div>
 
                 <div className="movie-modal-rating">
-                  ★ {selectedMovie.rating.toFixed(1)}
+                  <span>★</span>
+                  {selectedMovie.rating.toFixed(1)}
+                  <small>Рейтинг фильма</small>
                 </div>
-              </div>
-            </div>
 
-            <div className="movie-modal-content">
-              <div className="movie-detail-row">
-                <span>Наличие</span>
-                <strong>
-                  {availabilityLabels[selectedMovie.availability]}
-                </strong>
-              </div>
-
-              <div className="movie-detail-row">
-                <span>Просмотрен</span>
-                <strong>
-                  {selectedMovie.watched ? 'Да' : 'Нет'}
-                </strong>
-              </div>
-
-              <div className="movie-detail-row">
-                <span>В списке желаний</span>
-                <strong>
-                  {selectedMovie.inWishlist ? 'Да' : 'Нет'}
-                </strong>
-              </div>
-
-              <div className="movie-detail-section">
-                <h3>Описание</h3>
-                <p>{selectedMovie.overview || 'Описание пока отсутствует.'}</p>
-              </div>
-
-              <div className="movie-detail-section">
-                <h3>Жанры</h3>
-                <div className="movie-detail-tags">
+                <div className="movie-modal-genres">
                   {(selectedMovie.genres || [selectedMovie.genre]).map(
                     (genre) => (
                       <span className="movie-detail-tag" key={genre}>
@@ -276,48 +317,94 @@ function App() {
                   )}
                 </div>
               </div>
+            </div>
 
-              {director && (
-                <div className="movie-detail-section">
-                  <h3>Режиссёр</h3>
-                  <p>
-                    {director.name}
-                    {director.personalRating !== null &&
-                      ` · ★ ${director.personalRating}`}
-                  </p>
-                </div>
-              )}
-
-              <div className="movie-detail-section">
-                <h3>Актёры</h3>
-                {actors.length > 0 ? (
-                  <div className="movie-people-list">
-                    {actors.map((actor) => (
-                      <div className="movie-person" key={actor.id}>
-                        <span>{actor.name}</span>
-                        {actor.personalRating !== null && (
-                          <span>★ {actor.personalRating}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p>Информация об актёрах отсутствует.</p>
-                )}
-              </div>
-
-              <div className="movie-detail-section">
-                <h3>Моя оценка</h3>
+            <div className="movie-modal-body">
+              <section className="movie-modal-section movie-description">
+                <h3>О фильме</h3>
                 <p>
-                  {selectedMovie.personalRating !== null
-                    ? `★ ${selectedMovie.personalRating} из 5`
-                    : 'Ещё не оценён'}
+                  {selectedMovie.overview || 'Описание пока отсутствует.'}
                 </p>
+              </section>
+
+              <div className="movie-modal-columns">
+                <section className="movie-modal-section">
+                  <h3>Режиссёр</h3>
+
+                  {director ? (
+                    <button
+                      type="button"
+                      className="movie-person-link"
+                      onClick={() => setSelectedPerson(director)}
+                    >
+                      {director.name}
+                    </button>
+                  ) : (
+                    <p>Информация о режиссёре отсутствует.</p>
+                  )}
+                </section>
+
+                <section className="movie-modal-section">
+                  <h3>Актёрский состав</h3>
+
+                  {actors.length > 0 ? (
+                    <div className="movie-people-list">
+                      {actors.map((actor) => (
+                        <button
+                          type="button"
+                          className="movie-person-link"
+                          key={actor.id}
+                          onClick={() => setSelectedPerson(actor)}
+                        >
+                          {actor.name}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>Информация об актёрах отсутствует.</p>
+                  )}
+                </section>
               </div>
 
-              {selectedMovie.feedbackTags.length > 0 && (
-                <div className="movie-detail-section">
-                  <h3>Мои впечатления</h3>
+              <section className="movie-modal-section">
+                <h3>Статус в каталоге</h3>
+
+                <div
+                  className={`movie-modal-status status-${selectedMovie.availability}`}
+                >
+                  <span className="availability-dot" />
+                  {availabilityLabels[selectedMovie.availability]}
+                </div>
+              </section>
+
+              <section className="movie-modal-section personal-section">
+                <h3>Мои отметки</h3>
+
+                <div className="personal-rating-block">
+                  <span>Просмотрен</span>
+                  <strong>
+                    {selectedMovie.watched ? 'Да' : 'Нет'}
+                  </strong>
+                </div>
+
+                <div className="personal-rating-block">
+                  <span>Моя оценка</span>
+
+                  <strong>
+                    {selectedMovie.personalRating !== null
+                      ? `★ ${selectedMovie.personalRating} из 5`
+                      : 'Ещё не оценён'}
+                  </strong>
+                </div>
+
+                <div className="personal-rating-block">
+                  <span>Список желаний</span>
+                  <strong>
+                    {selectedMovie.inWishlist ? 'Добавлен' : 'Не добавлен'}
+                  </strong>
+                </div>
+
+                {selectedMovie.feedbackTags.length > 0 ? (
                   <div className="movie-detail-tags">
                     {selectedMovie.feedbackTags.map((tag) => (
                       <span className="movie-detail-tag" key={tag}>
@@ -325,16 +412,57 @@ function App() {
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p>Впечатления пока не добавлены.</p>
+                )}
 
-              {selectedMovie.comment && (
-                <div className="movie-detail-section">
-                  <h3>Мой комментарий</h3>
-                  <p>{selectedMovie.comment}</p>
-                </div>
-              )}
+                {selectedMovie.comment && (
+                  <div className="movie-comment">
+                    <span>Мой комментарий</span>
+                    <p>{selectedMovie.comment}</p>
+                  </div>
+                )}
+              </section>
             </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPerson && (
+        <div
+          className="person-modal-overlay"
+          onClick={() => setSelectedPerson(null)}
+        >
+          <div
+            className="person-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              selectedPerson.role === 'director'
+                ? `Карточка режиссёра ${selectedPerson.name}`
+                : `Карточка актёра ${selectedPerson.name}`
+            }
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="movie-modal-close"
+              onClick={() => setSelectedPerson(null)}
+              aria-label="Закрыть карточку"
+            >
+              ×
+            </button>
+
+            <div className="eyebrow">
+              {selectedPerson.role === 'director'
+                ? 'РЕЖИССЁР'
+                : 'АКТЁР'}
+            </div>
+
+            <h2>{selectedPerson.name}</h2>
+
+            <p>
+              Справочная карточка. Состав информации определим позже.
+            </p>
           </div>
         </div>
       )}

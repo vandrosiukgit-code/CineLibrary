@@ -1,11 +1,17 @@
 
+/* ========================================
+   ОСНОВА
+======================================== */
+
 .app-shell {
   display: flex;
   min-height: 100vh;
   background: var(--bg-main);
 }
 
-/* Боковая панель */
+/* ========================================
+   БОКОВАЯ ПАНЕЛЬ
+======================================== */
 
 .sidebar {
   width: 250px;
@@ -101,7 +107,9 @@
   font-size: 10px;
 }
 
-/* Основная область */
+/* ========================================
+   ОСНОВНАЯ ОБЛАСТЬ
+======================================== */
 
 .main-content {
   flex: 1;
@@ -134,15 +142,9 @@
   background: var(--bg-card);
 }
 
-/* Приветствие */
-
-.welcome-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 42px 0 32px;
-}
+/* ========================================
+   ПРИВЕТСТВИЕ
+======================================== */
 
 .eyebrow {
   margin-bottom: 12px;
@@ -150,6 +152,14 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
+}
+
+.welcome-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 42px 0 32px;
 }
 
 .welcome-section h1 {
@@ -182,7 +192,9 @@
   transform: translateY(-1px);
 }
 
-/* Статистика */
+/* ========================================
+   СТАТИСТИКА
+======================================== */
 
 .stats-grid {
   display: grid;
@@ -217,7 +229,9 @@
   font-size: 10px;
 }
 
-/* Библиотека */
+/* ========================================
+   БИБЛИОТЕКА
+======================================== */
 
 .content-section {
   margin-top: 48px;
@@ -282,7 +296,9 @@
   line-height: 1.7;
 }
 
-/* Карточки фильмов */
+/* ========================================
+   КАРТОЧКИ ФИЛЬМОВ
+======================================== */
 
 .movie-grid {
   display: grid;
@@ -300,570 +316,20 @@
   transform: translateY(-5px);
 }
 
-.movie-poster {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  overflow: hidden;
-  border-radius: 9px;
-  background: var(--bg-card);
-}
-
-.movie-poster img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.movie-poster-button {
   display: block;
-}
-
-.movie-rating {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 5px 8px;
-  border-radius: 5px;
-  background: rgba(16, 17, 22, 0.9);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.movie-info {
-  padding: 11px 2px;
-}
-
-.movie-info h3 {
-  margin-bottom: 5px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.movie-info p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-/* Кнопка мобильного меню — на компьютере скрыта */
-
-.menu-toggle,
-.menu-overlay {
-  display: none;
-}
-
-/* Планшеты */
-
-@media (min-width: 701px) and (max-width: 1100px) {
-  .sidebar {
-    width: 215px;
-    min-width: 215px;
-  }
-
-  .main-content {
-    padding-right: 25px;
-    padding-left: 25px;
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .movie-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-  }
-}
-
-/* Смартфоны */
-
-@media (max-width: 700px) {
-  .app-shell {
-    display: block;
-    min-height: 100vh;
-  }
-
-  /* Выдвижная боковая панель */
-
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 1000;
-    width: 280px;
-    max-width: 85vw;
-    height: 100dvh;
-    min-height: 100dvh;
-    padding: 22px 18px;
-    border-right: 1px solid var(--border);
-    border-bottom: 0;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-  }
-
-  .sidebar.sidebar-open {
-    transform: translateX(0);
-  }
-
-  .brand {
-    margin: 0 0 35px;
-    padding: 0 12px;
-    font-size: 19px;
-  }
-
-  .sidebar-label {
-    display: block;
-  }
-
-  .navigation {
-    display: flex;
-    flex-direction: column;
-    flex-wrap: nowrap;
-  }
-
-  .nav-item {
-    width: 100%;
-  }
-
-  .sidebar-bottom {
-    display: block;
-    margin-top: auto;
-  }
-
-  /* Затемнение за панелью */
-
-  .menu-overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 999;
-    background: rgba(0, 0, 0, 0.58);
-  }
-
-  /* Кнопка меню всегда выше затемнения */
-
-  .menu-toggle {
-    position: relative;
-    z-index: 1001;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 24px;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .menu-toggle:active {
-    background: var(--bg-hover);
-  }
-
-  /* Основная область */
-
-  .main-content {
-    padding: 0 16px 30px;
-  }
-
-  .topbar {
-    height: 54px;
-    justify-content: flex-start;
-    gap: 12px;
-  }
-
-  .breadcrumb {
-    flex: 1;
-    font-size: 11px;
-  }
-
-  .profile {
-    margin-left: auto;
-  }
-
-  .profile-avatar {
-    width: 32px;
-    height: 32px;
-  }
-
-  /* Приветствие */
-
-  .welcome-section {
-    padding: 27px 0 22px;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .eyebrow {
-    font-size: 9px;
-    margin-bottom: 9px;
-  }
-
-  .welcome-section h1 {
-    font-size: 24px;
-  }
-
-  .welcome-section p {
-    font-size: 12px;
-    margin-bottom: 0;
-  }
-
-  .add-button {
-    width: 100%;
-    min-height: 46px;
-    font-size: 13px;
-  }
-
-  /* Статистика */
-
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .stat-card {
-    min-height: 105px;
-    padding: 13px;
-  }
-
-  .stat-label {
-    font-size: 10px;
-    margin-bottom: 10px;
-  }
-
-  .stat-value {
-    font-size: 23px;
-  }
-
-  .stat-note {
-    font-size: 9px;
-  }
-
-  /* Фильмы */
-
-  .content-section {
-    margin-top: 32px;
-  }
-
-  .section-heading {
-    align-items: flex-start;
-    margin-bottom: 16px;
-  }
-
-  .section-heading h2 {
-    font-size: 16px;
-  }
-
-  .section-heading p {
-    font-size: 10px;
-  }
-
-.app-shell {
-  display: flex;
-  min-height: 100vh;
-  background: var(--bg-main);
-}
-
-/* Боковая панель */
-
-.sidebar {
-  width: 250px;
-  min-width: 250px;
-  min-height: 100vh;
-  padding: 30px 18px 20px;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 12px;
-  margin-bottom: 55px;
-  font-family: 'Manrope', sans-serif;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.7px;
-}
-
-.brand-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: var(--accent);
-  color: #17130e;
-  display: grid;
-  place-items: center;
-  font-size: 21px;
-  font-weight: 800;
-}
-
-.sidebar-label {
-  padding: 0 12px;
-  margin-bottom: 14px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-}
-
-.navigation {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.nav-item {
   width: 100%;
-  min-height: 44px;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  border: 0;
-  border-radius: 8px;
+  padding: 0;
+  border: none;
   background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
   text-align: left;
-  transition: 0.2s ease;
   cursor: pointer;
+  border-radius: inherit;
 }
 
-.nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.nav-item.active {
-  background: rgba(198, 155, 96, 0.12);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.nav-icon {
-  width: 20px;
-  text-align: center;
-  font-size: 18px;
-}
-
-.sidebar-bottom {
-  margin-top: auto;
-}
-
-.sidebar-version {
-  padding: 20px 12px 0;
-  color: var(--text-secondary);
-  font-size: 10px;
-}
-
-/* Основная область */
-
-.main-content {
-  flex: 1;
-  min-width: 0;
-  padding: 0 42px 50px;
-}
-
-.topbar {
-  height: 76px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-}
-
-.breadcrumb {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.profile-avatar {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-  font-size: 13px;
-  background: var(--bg-card);
-}
-
-/* Приветствие */
-
-.welcome-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 42px 0 32px;
-}
-
-.eyebrow {
-  margin-bottom: 12px;
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 2px;
-}
-
-.welcome-section h1 {
-  margin: 0 0 10px;
-  font-family: 'Manrope', sans-serif;
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -1px;
-}
-
-.welcome-section p {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.add-button {
-  padding: 12px 18px;
-  border: 0;
-  border-radius: 7px;
-  background: var(--accent);
-  color: #17130e;
-  font-size: 12px;
-  font-weight: 700;
-  transition: 0.2s ease;
-  cursor: pointer;
-}
-
-.add-button:hover {
-  filter: brightness(1.12);
-  transform: translateY(-1px);
-}
-
-/* Статистика */
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.stat-card {
-  min-height: 125px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-card);
-}
-
-.stat-label {
-  margin-bottom: 13px;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.stat-value {
-  margin-bottom: 5px;
-  font-family: 'Manrope', sans-serif;
-  font-size: 27px;
-  font-weight: 700;
-  letter-spacing: -1px;
-}
-
-.stat-note {
-  color: var(--text-secondary);
-  font-size: 10px;
-}
-
-/* Библиотека */
-
-.content-section {
-  margin-top: 48px;
-}
-
-.section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 22px;
-}
-
-.section-heading h2 {
-  margin-bottom: 7px;
-  font-family: 'Manrope', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.section-heading p {
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.text-button {
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.empty-state {
-  min-height: 230px;
-  padding: 35px 20px;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.empty-icon {
-  margin-bottom: 15px;
-  color: var(--accent);
-  font-size: 32px;
-}
-
-.empty-state h3 {
-  margin-bottom: 9px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.empty-state p {
-  max-width: 350px;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.7;
-}
-
-/* Карточки фильмов */
-
-.movie-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.movie-card {
-  min-width: 0;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-}
-
-.movie-card:hover {
-  transform: translateY(-5px);
+.movie-poster-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .movie-poster {
@@ -881,36 +347,6 @@
   object-fit: cover;
   display: block;
 }
-
-.movie-rating {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 5px 8px;
-  border-radius: 5px;
-  background: rgba(16, 17, 22, 0.9);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.movie-info {
-  padding: 11px 2px;
-}
-
-.movie-info h3 {
-  margin-bottom: 5px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.movie-info p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-/* Статусы фильмов */
 
 .movie-poster.status-available {
   border: 2px solid #35b875;
@@ -927,6 +363,18 @@
   box-shadow: 0 0 12px rgba(223, 85, 85, 0.2);
 }
 
+.movie-rating {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(16, 17, 22, 0.9);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .movie-new {
   position: absolute;
   top: 10px;
@@ -937,7 +385,6 @@
   color: #17130e;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.5px;
 }
 
 .movie-watched {
@@ -991,32 +438,401 @@
   color: #df5555;
 }
 
-/* Кнопка открытия карточки фильма */
-
-.movie-poster-button {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  border-radius: inherit;
+.movie-info {
+  padding: 11px 2px;
 }
 
-.movie-poster-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
+.movie-info h3 {
+  margin-bottom: 5px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-/* Кнопка мобильного меню — на компьютере скрыта */
+.movie-info p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* ========================================
+   МОБИЛЬНОЕ МЕНЮ
+======================================== */
 
 .menu-toggle,
 .menu-overlay {
   display: none;
 }
 
-/* Планшеты */
+/* ========================================
+   МОДАЛЬНОЕ ОКНО ФИЛЬМА
+======================================== */
+
+.movie-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: rgba(5, 6, 10, 0.94);
+  backdrop-filter: blur(8px);
+  overflow-y: auto;
+}
+
+.movie-modal {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: 900px;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  padding: 30px;
+  background: #191b23;
+  color: var(--text-primary);
+  border: 1px solid #343744;
+  border-radius: 16px;
+  box-shadow: 0 25px 100px rgba(0, 0, 0, 0.75);
+  scrollbar-color: #454957 #191b23;
+}
+
+.movie-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #414450;
+  border-radius: 50%;
+  background: #252833;
+  color: var(--text-primary);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.movie-modal-close:hover {
+  background: var(--accent);
+  color: #17130e;
+}
+
+/* Верхняя часть */
+
+.movie-modal-top {
+  display: grid;
+  grid-template-columns: 175px minmax(0, 1fr);
+  gap: 30px;
+  padding-bottom: 25px;
+  border-bottom: 1px solid var(--border);
+}
+
+.movie-modal-poster-wrap {
+  min-width: 0;
+}
+
+.movie-modal-poster {
+  display: block;
+  width: 100%;
+  max-height: 265px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 9px;
+  background: #101116;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.movie-modal-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #22252f;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.movie-modal-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.modal-flag {
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: #292c36;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.watched-flag {
+  color: #35b875;
+}
+
+.wishlist-flag {
+  color: var(--accent);
+}
+
+.new-flag {
+  background: var(--accent);
+  color: #17130e;
+}
+
+.movie-modal-summary {
+  min-width: 0;
+  padding: 8px 35px 0 0;
+}
+
+.movie-modal-summary .eyebrow {
+  margin-bottom: 14px;
+}
+
+.movie-modal-summary h2 {
+  margin: 0 0 9px;
+  font-family: 'Manrope', sans-serif;
+  font-size: clamp(25px, 3vw, 34px);
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  overflow-wrap: anywhere;
+}
+
+.movie-original-title {
+  margin: 0 0 14px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.movie-modal-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.meta-separator {
+  color: var(--accent);
+}
+
+.movie-modal-rating {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 22px;
+  color: #e5b341;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.movie-modal-rating > span {
+  font-size: 27px;
+}
+
+.movie-modal-rating small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.movie-modal-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+/* Основная информация */
+
+.movie-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-top: 24px;
+}
+
+.movie-modal-section {
+  min-width: 0;
+}
+
+.movie-modal-section h3 {
+  margin: 0 0 12px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.movie-modal-section > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.movie-description {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Режиссёр и актёры */
+
+.movie-modal-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 25px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.movie-people-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.movie-person-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #22252f;
+  color: var(--accent);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.movie-person-link:hover {
+  border-color: var(--accent);
+  background: #2b2e38;
+  color: #e8c18f;
+}
+
+/* Личные отметки */
+
+.personal-section {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #20232c;
+}
+
+.personal-rating-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 15px;
+  font-size: 12px;
+}
+
+.personal-rating-block > span {
+  color: var(--text-secondary);
+}
+
+.personal-rating-block strong {
+  color: #e5b341;
+  font-size: 14px;
+  text-align: right;
+}
+
+.movie-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.movie-detail-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid #414450;
+  border-radius: 20px;
+  background: #191b23;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.movie-comment {
+  margin-top: 17px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border);
+}
+
+.movie-comment > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.movie-comment p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ========================================
+   КАРТОЧКА АКТЁРА / РЕЖИССЁРА
+======================================== */
+
+.person-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 6, 10, 0.75);
+  backdrop-filter: blur(5px);
+}
+
+.person-modal {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  padding: 35px;
+  border: 1px solid #414450;
+  border-radius: 14px;
+  background: #20232c;
+  color: var(--text-primary);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.75);
+}
+
+.person-modal h2 {
+  margin: 0 45px 12px 0;
+  font-family: 'Manrope', sans-serif;
+  font-size: 25px;
+  overflow-wrap: anywhere;
+}
+
+.person-modal p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ========================================
+   ПЛАНШЕТЫ
+======================================== */
 
 @media (min-width: 701px) and (max-width: 1100px) {
   .sidebar {
@@ -1039,7 +855,9 @@
   }
 }
 
-/* Смартфоны */
+/* ========================================
+   СМАРТФОНЫ
+======================================== */
 
 @media (max-width: 700px) {
   .app-shell {
@@ -1058,7 +876,6 @@
     min-height: 100dvh;
     padding: 22px 18px;
     border-right: 1px solid var(--border);
-    border-bottom: 0;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -1074,10 +891,6 @@
     margin: 0 0 35px;
     padding: 0 12px;
     font-size: 19px;
-  }
-
-  .sidebar-label {
-    display: block;
   }
 
   .navigation {
@@ -1121,10 +934,6 @@
     flex-shrink: 0;
   }
 
-  .menu-toggle:active {
-    background: var(--bg-hover);
-  }
-
   .main-content {
     padding: 0 16px 30px;
   }
@@ -1156,7 +965,7 @@
     gap: 16px;
   }
 
-  .eyebrow {
+  .welcome-section .eyebrow {
     font-size: 9px;
     margin-bottom: 9px;
   }
@@ -1243,223 +1052,149 @@
     padding: 4px 6px;
     font-size: 10px;
   }
-}
 
-/* Модальное окно фильма */
+  /* Карточка фильма на смартфоне */
 
-.movie-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 24px;
-  background: rgba(10, 8, 15, 0.78);
-  overflow-y: auto;
-}
-
-.movie-modal {
-  position: relative;
-  width: 100%;
-  max-width: 760px;
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: 32px;
-  background: var(--bg-main);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  color: var(--text-primary);
-  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.3);
-}
-
-.movie-modal-close {
-  position: absolute;
-  top: 14px;
-  right: 18px;
-  width: 38px;
-  height: 38px;
-  border: none;
-  border-radius: 50%;
-  background: var(--bg-sidebar);
-  color: var(--text-primary);
-  font-size: 28px;
-  cursor: pointer;
-}
-
-.movie-modal-header {
-  display: flex;
-  gap: 24px;
-  padding-right: 30px;
-  margin-bottom: 28px;
-}
-
-.movie-modal-poster {
-  width: 155px;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  border-radius: 10px;
-  flex-shrink: 0;
-}
-
-.movie-modal-heading {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-}
-
-.movie-modal-heading h2 {
-  margin: 0;
-  font-size: 28px;
-  line-height: 1.2;
-}
-
-.movie-original-title,
-.movie-modal-year {
-  margin: 0;
-  color: var(--text-secondary);
-}
-
-.movie-modal-rating {
-  font-size: 20px;
-  font-weight: 700;
-  color: #d99b22;
-}
-
-.movie-modal-content {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.movie-detail-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 14px;
-}
-
-.movie-detail-row span {
-  color: var(--text-secondary);
-}
-
-.movie-detail-section h3 {
-  margin: 0 0 10px;
-  font-size: 16px;
-}
-
-.movie-detail-section p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.movie-detail-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.movie-detail-tag {
-  padding: 7px 11px;
-  border-radius: 20px;
-  background: var(--bg-sidebar);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.movie-people-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.movie-person {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 14px;
-}
-
-.movie-person span:last-child {
-  color: #d99b22;
-  font-weight: 600;
-}
-
-/* Мобильная версия карточки */
-
-@media (max-width: 600px) {
   .movie-modal-overlay {
     align-items: flex-start;
-    padding: 12px;
+    padding: 8px;
   }
 
   .movie-modal {
-    max-height: calc(100vh - 24px);
-    padding: 22px 18px;
-    border-radius: 14px;
-  }
-
-  .movie-modal-header {
-    gap: 14px;
-    padding-right: 24px;
-    margin-bottom: 22px;
-  }
-
-  .movie-modal-poster {
-    width: 105px;
-  }
-
-  .movie-modal-heading {
-    gap: 7px;
-  }
-
-  .movie-modal-heading h2 {
-    font-size: 20px;
-  }
-
-  .movie-modal-heading .eyebrow {
-    font-size: 9px;
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    padding: 18px 14px;
+    border-radius: 12px;
   }
 
   .movie-modal-close {
-    top: 8px;
-    right: 8px;
-    width: 32px;
-    height: 32px;
-    font-size: 24px;
-  }
-}
-
-  .text-button {
-    display: none;
+    top: 9px;
+    right: 9px;
+    width: 34px;
+    height: 34px;
+    font-size: 23px;
   }
 
-  .movie-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 15px 12px;
+  .movie-modal-top {
+    grid-template-columns: 105px minmax(0, 1fr);
+    gap: 13px;
+    padding-bottom: 17px;
   }
 
-  .movie-info {
-    padding: 8px 2px;
+  .movie-modal-poster {
+    max-height: 158px;
+    border-radius: 7px;
   }
 
-  .movie-info h3 {
+  .movie-modal-summary {
+    padding: 3px 24px 0 0;
+  }
+
+  .movie-modal-summary .eyebrow {
+    font-size: 8px;
+    letter-spacing: 1px;
+    margin-bottom: 9px;
+  }
+
+  .movie-modal-summary h2 {
+    font-size: 19px;
+    letter-spacing: -0.4px;
+  }
+
+  .movie-original-title {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .movie-modal-meta {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .movie-modal-rating {
+    margin-top: 13px;
+    font-size: 22px;
+  }
+
+  .movie-modal-rating > span {
+    font-size: 21px;
+  }
+
+  .movie-modal-rating small {
+    font-size: 9px;
+  }
+
+  .movie-modal-genres {
+    gap: 5px;
+    margin-top: 12px;
+  }
+
+  .movie-detail-tag {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .movie-modal-status {
+    gap: 6px;
+    padding: 8px 6px;
+    font-size: 9px;
+  }
+
+  .movie-modal-flags {
+    gap: 5px;
+  }
+
+  .modal-flag {
+    padding: 5px 6px;
+    font-size: 9px;
+  }
+
+  .movie-modal-body {
+    gap: 18px;
+    padding-top: 17px;
+  }
+
+  .movie-modal-section h3 {
+    font-size: 14px;
+  }
+
+  .movie-modal-section > p {
     font-size: 12px;
   }
 
-  .movie-info p {
-    font-size: 10px;
+  .movie-modal-columns {
+    grid-template-columns: 1fr;
+    gap: 17px;
+    padding-bottom: 17px;
   }
 
-  .movie-rating {
-    top: 7px;
-    right: 7px;
-    padding: 4px 6px;
-    font-size: 10px;
+  .movie-person-link {
+    font-size: 12px;
+  }
+
+  .personal-section {
+    padding: 13px;
+  }
+
+  .personal-rating-block {
+    font-size: 11px;
+  }
+
+  .personal-rating-block strong {
+    font-size: 12px;
+  }
+
+  /* Карточка актёра / режиссёра */
+
+  .person-modal-overlay {
+    padding: 14px;
+  }
+
+  .person-modal {
+    padding: 25px 20px;
+  }
+
+  .person-modal h2 {
+    font-size: 21px;
   }
 }
