@@ -15,9 +15,20 @@ from app.schemas.movies import (
     DownloadRequestRead,
     MovieDraftImportRequest,
     MovieRead,
+    MovieDownloadResult,
+    TMDBDownloadRequestCreate,
     TasteTagRead,
+    TelegramSettingsRead,
+    TelegramSettingsUpdate,
+    TelegramTestRead,
     UserDataUpdate,
 )
+from app.services.telegram_delivery import (
+    TelegramConfigurationError,
+    TelegramDeliveryError,
+)
+from app.services.movie_download import MovieDownloadService
+from app.services.movie_card_builder import MovieCardBuilderError
 
 
 router = APIRouter(prefix="/api/movies", tags=["movies"])
@@ -138,6 +149,66 @@ def create_download_request(payload: DownloadRequestCreate, request: Request):
         local_movie_id=payload.local_movie_id,
         title=payload.title,
     )
+
+
+@router.post(
+    "/download-requests/by-tmdb",
+    response_model=list[MovieDownloadResult],
+    response_model_by_alias=True,
+    status_code=201,
+)
+def create_download_requests_by_tmdb(
+    payload: TMDBDownloadRequestCreate, request: Request
+):
+    try:
+        tmdb = TMDBClient.from_environment()
+        return MovieDownloadService(
+            movies=request.app.state.movie_repository,
+            people=request.app.state.people_repository,
+            tmdb=tmdb,
+            telegram=request.app.state.telegram_delivery,
+        ).request_movies(payload.tmdb_movie_ids)
+    except (TMDBConfigurationError, TelegramConfigurationError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (TMDBAPIError, TelegramDeliveryError, MovieCardBuilderError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get(
+    "/telegram-settings",
+    response_model=TelegramSettingsRead,
+    response_model_by_alias=True,
+)
+def get_telegram_settings(request: Request):
+    return request.app.state.telegram_delivery.get_settings()
+
+
+@router.put(
+    "/telegram-settings",
+    response_model=TelegramSettingsRead,
+    response_model_by_alias=True,
+)
+def save_telegram_settings(payload: TelegramSettingsUpdate, request: Request):
+    try:
+        return request.app.state.telegram_delivery.save_settings(
+            payload.bot_token, payload.chat_id
+        )
+    except TelegramConfigurationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post(
+    "/telegram-settings/test",
+    response_model=TelegramTestRead,
+    response_model_by_alias=True,
+)
+def test_telegram_settings(request: Request):
+    try:
+        return {"message_id": request.app.state.telegram_delivery.send_test()}
+    except TelegramConfigurationError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except TelegramDeliveryError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.get("/{movie_id}", response_model=MovieRead, response_model_by_alias=True)

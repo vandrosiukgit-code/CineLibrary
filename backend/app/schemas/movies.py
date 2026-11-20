@@ -75,8 +75,38 @@ class DownloadRequestRead(BaseModel):
     tmdb_movie_id: int = Field(serialization_alias="tmdbMovieId")
     local_movie_id: int | None = Field(serialization_alias="localMovieId")
     title: str
+    international_title: str | None = Field(serialization_alias="internationalTitle")
+    file_name: str | None = Field(serialization_alias="fileName")
+    telegram_message_id: int | None = Field(serialization_alias="telegramMessageId")
     status: str
     requested_at: str = Field(serialization_alias="requestedAt")
+
+
+class TMDBDownloadRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    tmdb_movie_ids: list[int] = Field(
+        alias="tmdbMovieIds", min_length=1, max_length=20
+    )
+
+
+class TelegramSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    bot_token: str | None = Field(default=None, alias="botToken", min_length=1)
+    chat_id: str = Field(alias="chatId", min_length=1, max_length=100)
+
+
+class TelegramSettingsRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    configured: bool
+    chat_id: str | None = Field(serialization_alias="chatId")
+    updated_at: str | None = Field(serialization_alias="updatedAt")
+
+
+class TelegramTestRead(BaseModel):
+    message_id: int = Field(serialization_alias="messageId")
 
 
 class UserDataUpdate(BaseModel):
@@ -127,3 +157,12 @@ class MovieRead(BaseModel):
     sources: list[SourceRead]
     availability: AvailabilityStatus
     user_data: UserDataRead = Field(serialization_alias="userData")
+
+
+class MovieDownloadResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    movie: MovieRead
+    download_request: DownloadRequestRead = Field(
+        serialization_alias="downloadRequest"
+    )

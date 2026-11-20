@@ -3,11 +3,16 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import {
   loadDownloadRequests,
+  loadAPICredentials,
   loadGenres,
   loadTasteTags,
+  loadTelegramSettings,
   loadMovies,
-  requestMovieDownload,
+  requestMoviesByTmdb,
   saveUserData,
+  saveTelegramSettings,
+  saveAPICredentials,
+  testTelegramSettings,
   type LibraryFilter,
   type LibrarySort,
   type MovieView,
@@ -23,6 +28,14 @@ import {
   type PersonFilmographyItem,
   type PersonRecord,
 } from './data/personApi'
+import {
+  cancelRecommendationJob,
+  loadRecommendationJob,
+  promoteRecommendations,
+  startRecommendationJob,
+  type RecommendationJobLog,
+  type RecommendationResponse,
+} from './data/recommendationApi'
 import {
   CineLibraryWordmark,
   getTypographyVariant,
@@ -47,14 +60,14 @@ interface FilmographyPreview {
   width: number
 }
 
-const menuItems = [
-  { icon: '▤', label: 'Весь дневник', filter: 'all' },
-  { icon: '★', label: 'Оценка 4–5', filter: 'high-rated' },
-  { icon: '↻', label: 'Хочу пересмотреть', filter: 'rewatch' },
-  { icon: '−', label: 'Не понравилось', filter: 'disliked' },
-  { icon: '☆', label: 'Без оценки', filter: 'unrated' },
-  { icon: '◇', label: 'Без впечатлений', filter: 'untagged' },
-] satisfies { icon: string; label: string; filter: LibraryFilter }[]
+type ReferenceRelation = 'similar' | 'avoid'
+type PreferenceRelation = 'prefer' | 'require' | 'exclude'
+
+interface ConfiguratorSelection<Relation extends string> {
+  id: string
+  label: string
+  relation: Relation
+}
 
 const availabilityLabels = {
   available: 'На диске',
@@ -63,11 +76,18 @@ const availabilityLabels = {
 }
 
 const configuratorCards = [
-  'Тестовая строка первой карточки',
-  'Тестовая строка второй карточки',
-  'Тестовая строка третьей карточки',
-  'Тестовая строка четвёртой карточки',
-  'Тестовая строка пятой карточки',
+  { id: 'wish', title: 'Пожелание', question: 'Какой фильм вы хотите посмотреть?' },
+  {
+    id: 'references',
+    title: 'Фильмы-ориентиры',
+    question: 'На какие просмотренные фильмы стоит ориентироваться?',
+  },
+  { id: 'genres', title: 'Жанры', question: 'Какие жанры учитывать?' },
+  {
+    id: 'constraints',
+    title: 'Дополнительные ограничения',
+    question: 'Есть ли дополнительные ограничения?',
+  },
 ]
 
 function CineLibraryHero() {
@@ -81,10 +101,23 @@ function CineLibraryHero() {
 
 function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isTelegramSettingsOpen, setIsTelegramSettingsOpen] = useState(false)
+  const [isAPICredentialsOpen, setIsAPICredentialsOpen] = useState(false)
+  const [replicateConfigured, setReplicateConfigured] = useState(false)
+  const [tmdbConfigured, setTmdbConfigured] = useState(false)
+  const [replicateApiToken, setReplicateApiToken] = useState('')
+  const [tmdbReadAccessToken, setTmdbReadAccessToken] = useState('')
+  const [apiCredentialsStatus, setApiCredentialsStatus] = useState('')
+  const [isSavingAPICredentials, setIsSavingAPICredentials] = useState(false)
+  const [telegramConfigured, setTelegramConfigured] = useState(false)
+  const [telegramBotToken, setTelegramBotToken] = useState('')
+  const [telegramChatId, setTelegramChatId] = useState('')
+  const [telegramSettingsStatus, setTelegramSettingsStatus] = useState('')
+  const [isSavingTelegramSettings, setIsSavingTelegramSettings] = useState(false)
   const [movies, setMovies] = useState<MovieView[]>([])
   const [knownMovies, setKnownMovies] = useState<MovieView[]>([])
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<LibraryFilter>('all')
+  const [filter] = useState<LibraryFilter>('all')
   const [genre, setGenre] = useState('')
   const [sort, setSort] = useState<LibrarySort>('release_desc')
   const [knownGenres, setKnownGenres] = useState<string[]>([])
@@ -112,13 +145,44 @@ function App() {
   } | null>(null)
   const [isRecommendationOpen, setIsRecommendationOpen] = useState(false)
   const [configuratorStep, setConfiguratorStep] = useState(0)
-  const [configuratorSelections, setConfiguratorSelections] = useState<boolean[]>(
-    () => configuratorCards.map(() => false),
-  )
+  const [configuratorWish, setConfiguratorWish] = useState('')
+  const [referenceSelections, setReferenceSelections] =
+    useState<ConfiguratorSelection<ReferenceRelation>[]>([])
+  const [genreSelections, setGenreSelections] =
+    useState<ConfiguratorSelection<PreferenceRelation>[]>([])
+  const [configuratorSearch, setConfiguratorSearch] = useState('')
+  const [referenceGenre, setReferenceGenre] = useState('')
+  const [referenceSort, setReferenceSort] = useState<LibrarySort>('release_desc')
+  const [genreCandidate, setGenreCandidate] = useState('')
+  const [genreCandidateRelation, setGenreCandidateRelation] =
+    useState<PreferenceRelation>('prefer')
+  const [configuratorConstraints, setConfiguratorConstraints] = useState({
+    yearFrom: '',
+    yearTo: '',
+    maxRuntimeMinutes: '',
+    country: '',
+    certification: '',
+    language: '',
+  })
   const [isConfiguratorSummary, setIsConfiguratorSummary] = useState(false)
   const [isEditingConfiguratorStep, setIsEditingConfiguratorStep] =
     useState(false)
   const [configuratorNotice, setConfiguratorNotice] = useState('')
+  const [recommendationCount, setRecommendationCount] = useState(5)
+  const [recommendationResult, setRecommendationResult] =
+    useState<RecommendationResponse | null>(null)
+  const [isRecommending, setIsRecommending] = useState(false)
+  const [recommendationJobId, setRecommendationJobId] = useState<string | null>(null)
+  const [recommendationLogs, setRecommendationLogs] =
+    useState<RecommendationJobLog[]>([])
+  const [isStoppingRecommendation, setIsStoppingRecommendation] = useState(false)
+  const [recommendationError, setRecommendationError] = useState('')
+  const [selectedRecommendationIds, setSelectedRecommendationIds] =
+    useState<Set<string>>(new Set())
+  const [isPromotingRecommendations, setIsPromotingRecommendations] =
+    useState(false)
+  const [promotedRecommendationIds, setPromotedRecommendationIds] =
+    useState<Set<string>>(new Set())
   const movieCloseButtonRef = useRef<HTMLButtonElement>(null)
   const movieTriggerRef = useRef<HTMLElement | null>(null)
   const previewCloseTimerRef = useRef<number | null>(null)
@@ -306,6 +370,53 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!recommendationJobId) return
+    let isActive = true
+
+    const poll = async () => {
+      try {
+        const job = await loadRecommendationJob(recommendationJobId)
+        if (!isActive) return
+        setRecommendationLogs(job.logs)
+        if (job.status === 'completed' && job.result) {
+          setRecommendationResult(job.result)
+          setPromotedRecommendationIds(new Set())
+          setIsRecommending(false)
+          setIsStoppingRecommendation(false)
+          setRecommendationJobId(null)
+        } else if (job.status === 'failed') {
+          setRecommendationError(job.error || 'Подбор завершился с ошибкой')
+          setIsRecommending(false)
+          setIsStoppingRecommendation(false)
+          setRecommendationJobId(null)
+        } else if (job.status === 'cancelled') {
+          setRecommendationError('Подбор остановлен пользователем.')
+          setIsRecommending(false)
+          setIsStoppingRecommendation(false)
+          setRecommendationJobId(null)
+        }
+      } catch (requestError) {
+        if (!isActive) return
+        setRecommendationError(
+          requestError instanceof Error
+            ? requestError.message
+            : 'Не удалось получить состояние подбора',
+        )
+        setIsRecommending(false)
+        setIsStoppingRecommendation(false)
+        setRecommendationJobId(null)
+      }
+    }
+
+    void poll()
+    const timer = window.setInterval(() => void poll(), 1000)
+    return () => {
+      isActive = false
+      window.clearInterval(timer)
+    }
+  }, [recommendationJobId])
+
+  useEffect(() => {
     document.body.style.overflow = selectedMovie || isRecommendationOpen
       ? 'hidden'
       : ''
@@ -381,9 +492,102 @@ function App() {
 
   const director = selectedMovie?.director ?? null
   const actors = selectedMovie?.actors ?? []
+  const normalizedReferenceSearch = configuratorSearch
+    .trim()
+    .toLocaleLowerCase('ru')
+  const referenceSearchTokens = normalizedReferenceSearch
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+  const referenceResults = normalizedReferenceSearch || referenceGenre
+    ? knownMovies
+      .filter((movie) => {
+        const searchable = `${movie.title} ${movie.originalTitle} ${movie.people
+          .map((person) => `${person.displayName} ${person.canonicalName}`)
+          .join(' ')}`
+          .toLocaleLowerCase('ru')
+        return referenceSearchTokens.every((token) => searchable.includes(token))
+          && (!referenceGenre || movie.genres.includes(referenceGenre))
+      })
+      .sort((left, right) => {
+        if (referenceSort === 'release_asc') return left.year - right.year
+        if (referenceSort === 'release_desc') return right.year - left.year
+        if (referenceSort === 'rating_desc') {
+          return (right.personalRating ?? -1) - (left.personalRating ?? -1)
+        }
+        return left.title.localeCompare(right.title, 'ru')
+      })
+      .slice(0, 12)
+    : []
+
+  const updateSelection = <Relation extends string,>(
+    current: ConfiguratorSelection<Relation>[],
+    id: string,
+    label: string,
+    relation: Relation | '',
+  ) => {
+    if (!relation) return current.filter((item) => item.id !== id)
+    const existing = current.some((item) => item.id === id)
+    return existing
+      ? current.map((item) => item.id === id ? { ...item, relation } : item)
+      : [...current, { id, label, relation }]
+  }
+
+  const getConfiguratorValues = (step: number): string[] => {
+    if (step === 0) return configuratorWish.trim() ? [configuratorWish.trim()] : []
+    if (step === 1) {
+      return referenceSelections.map((item) =>
+        `${item.relation === 'similar' ? 'Похожее на' : 'Не похожее на'}: ${item.label}`,
+      )
+    }
+    if (step === 2) {
+      const labels: Record<PreferenceRelation, string> = {
+        prefer: 'Желательно',
+        require: 'Обязательно',
+        exclude: 'Исключить',
+      }
+      return genreSelections.map((item) => `${labels[item.relation]}: ${item.label}`)
+    }
+    return [
+      configuratorConstraints.yearFrom
+        ? `Год выпуска от: ${configuratorConstraints.yearFrom}`
+        : '',
+      configuratorConstraints.yearTo
+        ? `Год выпуска до: ${configuratorConstraints.yearTo}`
+        : '',
+      configuratorConstraints.maxRuntimeMinutes
+        ? `Продолжительность до: ${configuratorConstraints.maxRuntimeMinutes} минут`
+        : '',
+      configuratorConstraints.country
+        ? `Страна: ${configuratorConstraints.country}`
+        : '',
+      configuratorConstraints.certification
+        ? `Возрастной рейтинг: ${configuratorConstraints.certification}`
+        : '',
+      configuratorConstraints.language
+        ? `Язык: ${configuratorConstraints.language}`
+        : '',
+    ].filter(Boolean)
+  }
+
+  const clearConfiguratorCard = (step: number) => {
+    if (step === 0) setConfiguratorWish('')
+    if (step === 1) setReferenceSelections([])
+    if (step === 2) setGenreSelections([])
+    if (step === 3) {
+      setConfiguratorConstraints({
+        yearFrom: '',
+        yearTo: '',
+        maxRuntimeMinutes: '',
+        country: '',
+        certification: '',
+        language: '',
+      })
+    }
+  }
 
   const finishConfiguratorCard = () => {
     setConfiguratorNotice('')
+    setConfiguratorSearch('')
     if (isEditingConfiguratorStep) {
       setIsEditingConfiguratorStep(false)
       setIsConfiguratorSummary(true)
@@ -397,11 +601,7 @@ function App() {
   }
 
   const skipConfiguratorCard = () => {
-    setConfiguratorSelections((currentSelections) =>
-      currentSelections.map((isSelected, index) =>
-        index === configuratorStep ? false : isSelected,
-      ),
-    )
+    clearConfiguratorCard(configuratorStep)
     finishConfiguratorCard()
   }
 
@@ -410,6 +610,74 @@ function App() {
     setIsEditingConfiguratorStep(true)
     setIsConfiguratorSummary(false)
     setConfiguratorNotice('')
+    setConfiguratorSearch('')
+  }
+
+  const submitRecommendationRequest = async () => {
+    setIsRecommending(true)
+    setIsStoppingRecommendation(false)
+    setRecommendationError('')
+    setConfiguratorNotice('')
+    setRecommendationLogs([])
+    setSelectedRecommendationIds(new Set())
+    setPromotedRecommendationIds(new Set())
+    try {
+      const answers = configuratorCards.map((card, index) => {
+        const values = getConfiguratorValues(index)
+        return {
+          cardId: card.id,
+          title: card.title,
+          values,
+          skipped: values.length === 0,
+        }
+      })
+      const job = await startRecommendationJob(answers, recommendationCount)
+      setRecommendationJobId(job.jobId)
+      setRecommendationLogs(job.logs)
+    } catch (requestError) {
+      setRecommendationError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Не удалось подобрать фильмы',
+      )
+      setIsRecommending(false)
+    }
+  }
+
+  const stopRecommendationRequest = async () => {
+    if (!recommendationJobId || isStoppingRecommendation) return
+    setIsStoppingRecommendation(true)
+    try {
+      const job = await cancelRecommendationJob(recommendationJobId)
+      setRecommendationLogs(job.logs)
+    } catch (requestError) {
+      setRecommendationError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Не удалось остановить подбор',
+      )
+      setIsStoppingRecommendation(false)
+    }
+  }
+
+  const requestRecommendedMovies = async () => {
+    if (!recommendationResult || selectedRecommendationIds.size === 0) return
+    setIsPromotingRecommendations(true)
+    setRecommendationError('')
+    try {
+      const ids = Array.from(selectedRecommendationIds)
+      await promoteRecommendations(recommendationResult.sessionId, ids)
+      setPromotedRecommendationIds((currentIds) => new Set([...currentIds, ...ids]))
+      setSelectedRecommendationIds(new Set())
+    } catch (requestError) {
+      setRecommendationError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Не удалось отправить фильм на загрузку',
+      )
+    } finally {
+      setIsPromotingRecommendations(false)
+    }
   }
 
   const applyUserData = async (
@@ -485,14 +753,10 @@ function App() {
     }
     setRequestingMovieId(preview.tmdbMovieId)
     try {
-      const request = await requestMovieDownload({
-        tmdbMovieId: preview.tmdbMovieId,
-        localMovieId: preview.localMovieId,
-        title: preview.title,
-      })
+      const [result] = await requestMoviesByTmdb([preview.tmdbMovieId])
       setRequestedMovieIds((currentIds) => {
         const nextIds = new Set(currentIds)
-        nextIds.add(request.tmdbMovieId)
+        nextIds.add(result.downloadRequest.tmdbMovieId)
         return nextIds
       })
       setError('')
@@ -521,9 +785,91 @@ function App() {
     })
   }
 
-  const selectMenuItem = (selectedFilter: LibraryFilter) => {
-    setFilter(selectedFilter)
+  const openTelegramSettings = async () => {
+    setIsTelegramSettingsOpen(true)
     setIsMenuOpen(false)
+    setTelegramSettingsStatus('')
+    try {
+      const settings = await loadTelegramSettings()
+      setTelegramConfigured(settings.configured)
+      setTelegramChatId(settings.chatId ?? '')
+    } catch (settingsError) {
+      setTelegramSettingsStatus(
+        settingsError instanceof Error ? settingsError.message : 'Не удалось загрузить настройки',
+      )
+    }
+  }
+
+  const submitTelegramSettings = async () => {
+    setIsSavingTelegramSettings(true)
+    setTelegramSettingsStatus('')
+    try {
+      const settings = await saveTelegramSettings({
+        ...(telegramBotToken.trim() ? { botToken: telegramBotToken.trim() } : {}),
+        chatId: telegramChatId.trim(),
+      })
+      setTelegramConfigured(settings.configured)
+      setTelegramBotToken('')
+      setTelegramSettingsStatus('Настройки сохранены.')
+    } catch (settingsError) {
+      setTelegramSettingsStatus(
+        settingsError instanceof Error ? settingsError.message : 'Не удалось сохранить настройки',
+      )
+    } finally {
+      setIsSavingTelegramSettings(false)
+    }
+  }
+
+  const sendTelegramTest = async () => {
+    setIsSavingTelegramSettings(true)
+    setTelegramSettingsStatus('')
+    try {
+      await testTelegramSettings()
+      setTelegramSettingsStatus('Тестовое сообщение отправлено.')
+    } catch (settingsError) {
+      setTelegramSettingsStatus(
+        settingsError instanceof Error ? settingsError.message : 'Тест не выполнен',
+      )
+    } finally {
+      setIsSavingTelegramSettings(false)
+    }
+  }
+
+  const openAPICredentials = async () => {
+    setIsAPICredentialsOpen(true)
+    setIsMenuOpen(false)
+    setApiCredentialsStatus('')
+    try {
+      const settings = await loadAPICredentials()
+      setReplicateConfigured(settings.replicateConfigured)
+      setTmdbConfigured(settings.tmdbConfigured)
+    } catch (settingsError) {
+      setApiCredentialsStatus(
+        settingsError instanceof Error ? settingsError.message : 'Не удалось загрузить API-ключи',
+      )
+    }
+  }
+
+  const submitAPICredentials = async () => {
+    setIsSavingAPICredentials(true)
+    setApiCredentialsStatus('')
+    try {
+      const settings = await saveAPICredentials({
+        ...(replicateApiToken.trim() ? { replicateApiToken: replicateApiToken.trim() } : {}),
+        ...(tmdbReadAccessToken.trim() ? { tmdbReadAccessToken: tmdbReadAccessToken.trim() } : {}),
+      })
+      setReplicateConfigured(settings.replicateConfigured)
+      setTmdbConfigured(settings.tmdbConfigured)
+      setReplicateApiToken('')
+      setTmdbReadAccessToken('')
+      setApiCredentialsStatus('API-ключи сохранены и уже используются backend.')
+    } catch (settingsError) {
+      setApiCredentialsStatus(
+        settingsError instanceof Error ? settingsError.message : 'Не удалось сохранить API-ключи',
+      )
+    } finally {
+      setIsSavingAPICredentials(false)
+    }
   }
 
   return (
@@ -541,31 +887,21 @@ function App() {
           <span>CineLibrary</span>
         </div>
 
-        <div className="sidebar-label">МЕНЮ</div>
-
-        <nav className="navigation">
-          {menuItems.map((item) => (
-            <button
-              className={`nav-item ${filter === item.filter ? 'active' : ''}`}
-              key={item.label}
-              onClick={() => selectMenuItem(item.filter)}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-bottom">
-          <button className="nav-item">
-            <span className="nav-icon">⚙</span>
-            <span>Настройки</span>
-          </button>
-
-          <div className="sidebar-version">
-            CineLibrary · версия 0.1
-          </div>
-        </div>
+        <div className="sidebar-label">НАСТРОЙКИ</div>
+        <button className="nav-item chatbot-settings-link" onClick={openTelegramSettings}>
+          <span className="nav-icon">↗</span>
+          <span>
+            <strong>Telegram-бот</strong>
+            <small>Открыть настройки</small>
+          </span>
+        </button>
+        <button className="nav-item chatbot-settings-link" onClick={openAPICredentials}>
+          <span className="nav-icon">⌁</span>
+          <span>
+            <strong>API-ключи</strong>
+            <small>Replicate и TMDB</small>
+          </span>
+        </button>
       </aside>
 
       <main className="main-content">
@@ -592,7 +928,17 @@ function App() {
 
           <button
             className="add-button"
-            onClick={() => setIsRecommendationOpen(true)}
+            onClick={() => {
+              if (isRecommending) {
+                setIsConfiguratorSummary(true)
+              } else if (!recommendationResult) {
+                setRecommendationError('')
+                setRecommendationLogs([])
+                setConfiguratorStep(0)
+                setIsConfiguratorSummary(false)
+              }
+              setIsRecommendationOpen(true)
+            }}
           >
             Подобрать фильмы
           </button>
@@ -721,7 +1067,9 @@ function App() {
           onClick={() => setIsRecommendationOpen(false)}
         >
           <section
-            className="recommendation-modal"
+            className={`recommendation-modal ${
+              recommendationResult ? 'has-results' : ''
+            }`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="recommendation-title"
@@ -739,63 +1087,235 @@ function App() {
             <header className="recommendation-header">
               <span className="eyebrow">ИНТЕЛЛЕКТУАЛЬНЫЙ ПОДБОР</span>
               <h2 id="recommendation-title">
-                {isConfiguratorSummary ? 'Сводка запроса' : 'Подбор фильмов'}
+                {recommendationResult
+                  ? 'Рекомендации'
+                  : isConfiguratorSummary
+                    ? 'Сводка запроса'
+                    : 'Подбор фильмов'}
               </h2>
               <p>
-                {isConfiguratorSummary
+                {recommendationResult
+                  ? 'Временный каталог: выберите фильмы, которые хотите отправить на загрузку.'
+                  : isConfiguratorSummary
                   ? 'Проверьте ответы и при необходимости вернитесь к нужной карточке.'
                   : `Карточка ${configuratorStep + 1} из ${configuratorCards.length}`}
               </p>
             </header>
 
-            {isConfiguratorSummary ? (
-              <section className="configurator-summary">
-                {configuratorCards.map((text, index) => (
-                  <article key={text}>
-                    <div>
-                      <span>Карточка {index + 1}</span>
-                      <strong>{text}</strong>
-                      <small>
-                        {configuratorSelections[index] ? 'Выбрано' : 'Пропущено'}
-                      </small>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => editConfiguratorCard(index)}
-                    >
-                      Изменить
-                    </button>
-                  </article>
-                ))}
+            {recommendationResult ? (
+              <section className="temporary-recommendations">
+                {recommendationResult.movies.map((recommendation) => {
+                  const localMovie = recommendation.existingMovieId
+                    ? knownMovies.find(
+                        (movie) => movie.id === recommendation.existingMovieId,
+                      )
+                    : null
+                  const title = recommendation.movie?.title
+                    ?? localMovie?.title
+                    ?? recommendation.suggestion.title
+                  const poster = recommendation.movie?.posterUrl
+                    ?? localMovie?.poster
+                    ?? null
+                  const year = recommendation.movie?.releaseYear
+                    ?? localMovie?.year
+                    ?? recommendation.suggestion.releaseYear
+                  const overview = recommendation.movie?.overview
+                    ?? localMovie?.overview
+                    ?? ''
+                  const genres = recommendation.movie?.genres.map(
+                    (item) => item.displayName,
+                  ) ?? localMovie?.genres ?? []
+                  const canRequest = recommendation.status === 'draft_ready'
+                    || recommendation.status === 'already_exists'
+                  const isPromoted = promotedRecommendationIds.has(
+                    recommendation.id,
+                  )
+                  const isSelected = selectedRecommendationIds.has(
+                    recommendation.id,
+                  )
 
-                {configuratorNotice && (
-                  <p className="configurator-notice">{configuratorNotice}</p>
+                  return (
+                    <article key={recommendation.id}>
+                      {poster ? (
+                        <img src={poster} alt={title} />
+                      ) : (
+                        <div className="temporary-poster-fallback">Нет постера</div>
+                      )}
+                      <div className="temporary-recommendation-body">
+                        <div className="temporary-recommendation-heading">
+                          <div>
+                            <h3>{title}</h3>
+                            <p>
+                              {year || 'Год неизвестен'}
+                              {genres.length > 0 && ` · ${genres.join(', ')}`}
+                            </p>
+                          </div>
+                          <strong>
+                            {recommendation.suggestion.relevance}% релевантности
+                          </strong>
+                        </div>
+                        {overview && <p>{overview}</p>}
+                        {recommendation.people.length > 0 && (
+                          <p className="temporary-people">
+                            {recommendation.people
+                              .slice(0, 8)
+                              .map((person) => person.displayName)
+                              .join(', ')}
+                          </p>
+                        )}
+                        {recommendation.issues.length > 0 && (
+                          <p className="temporary-issues">
+                            {recommendation.issues.join(' ')}
+                          </p>
+                        )}
+                        <label className={`temporary-selection ${isSelected ? 'is-selected' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={!canRequest || isPromoted || isPromotingRecommendations}
+                            onChange={() => setSelectedRecommendationIds((currentIds) => {
+                              const nextIds = new Set(currentIds)
+                              if (nextIds.has(recommendation.id)) {
+                                nextIds.delete(recommendation.id)
+                              } else {
+                                nextIds.add(recommendation.id)
+                              }
+                              return nextIds
+                            })}
+                          />
+                          <span>
+                            {isPromoted ? 'Запрос отправлен' : 'Выбрать для загрузки'}
+                          </span>
+                        </label>
+                      </div>
+                    </article>
+                  )
+                })}
+
+                {recommendationError && (
+                  <p className="configurator-error">{recommendationError}</p>
                 )}
+
+                <div className="temporary-batch-actions">
+                  <span>Выбрано: {selectedRecommendationIds.size}</span>
+                  <button
+                    type="button"
+                    disabled={selectedRecommendationIds.size === 0 || isPromotingRecommendations}
+                    onClick={requestRecommendedMovies}
+                  >
+                    {isPromotingRecommendations
+                      ? 'Обрабатываем и отправляем…'
+                      : 'Отправить выбранные в Telegram'}
+                  </button>
+                </div>
 
                 <div className="configurator-actions">
                   <button
                     type="button"
                     className="configurator-secondary"
+                    onClick={() => setRecommendationResult(null)}
+                  >
+                    Вернуться к сводке
+                  </button>
+                </div>
+              </section>
+            ) : isConfiguratorSummary ? (
+              <section className="configurator-summary">
+                {configuratorCards.map((card, index) => {
+                  const values = getConfiguratorValues(index)
+                  return (
+                  <article key={card.id}>
+                    <div>
+                      <span>{index + 1}. {card.title}</span>
+                      <strong>{card.question}</strong>
+                      <small>
+                        {values.length > 0 ? values.join(' · ') : 'Пропущено'}
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isRecommending}
+                      onClick={() => editConfiguratorCard(index)}
+                    >
+                      Изменить
+                    </button>
+                  </article>
+                  )
+                })}
+
+                {configuratorNotice && (
+                  <p className="configurator-notice">{configuratorNotice}</p>
+                )}
+                {recommendationLogs.length > 0 && (
+                  <div className="recommendation-log" aria-live="polite">
+                    <strong>Ход подбора</strong>
+                    <ol>
+                      {recommendationLogs.map((entry) => (
+                        <li key={entry.sequence}>
+                          <time>
+                            {new Date(entry.createdAt).toLocaleTimeString('ru-RU')}
+                          </time>
+                          <span>{entry.message}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                {recommendationError && (
+                  <p className="configurator-error">{recommendationError}</p>
+                )}
+
+                <label className="recommendation-count">
+                  <span>Количество фильмов</span>
+                  <select
+                    value={recommendationCount}
+                    disabled={isRecommending}
+                    onChange={(event) =>
+                      setRecommendationCount(Number(event.target.value))
+                    }
+                  >
+                    {[3, 5, 7, 10].map((count) => (
+                      <option value={count} key={count}>{count}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="configurator-actions">
+                  <button
+                    type="button"
+                    className="configurator-secondary"
+                    disabled={isRecommending}
                     onClick={() => {
-                      setConfiguratorSelections(configuratorCards.map(() => false))
+                      configuratorCards.forEach((_card, index) =>
+                        clearConfiguratorCard(index),
+                      )
                       setConfiguratorStep(0)
                       setIsConfiguratorSummary(false)
                       setConfiguratorNotice('')
+                      setRecommendationError('')
+                      setRecommendationLogs([])
                     }}
                   >
                     Пройти заново
                   </button>
-                  <button
-                    type="button"
-                    className="configurator-primary"
-                    onClick={() =>
-                      setConfiguratorNotice(
-                        'Каркас работает. Подключение агента будет следующим этапом.',
-                      )
-                    }
-                  >
-                    Получить рекомендации
-                  </button>
+                  {isRecommending ? (
+                    <button
+                      type="button"
+                      className="configurator-stop"
+                      disabled={isStoppingRecommendation}
+                      onClick={stopRecommendationRequest}
+                    >
+                      {isStoppingRecommendation ? 'Останавливаем…' : 'Прервать'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="configurator-primary"
+                      onClick={submitRecommendationRequest}
+                    >
+                      Подобрать
+                    </button>
+                  )}
                 </div>
               </section>
             ) : (
@@ -808,28 +1328,250 @@ function App() {
                   />
                 </div>
 
-                <button
-                  type="button"
-                  className={
-                    configuratorSelections[configuratorStep]
-                      ? 'configurator-option is-selected'
-                      : 'configurator-option'
-                  }
-                  aria-pressed={configuratorSelections[configuratorStep]}
-                  onClick={() => {
-                    setConfiguratorSelections((currentSelections) =>
-                      currentSelections.map((isSelected, index) =>
-                        index === configuratorStep ? !isSelected : isSelected,
-                      ),
-                    )
-                    setConfiguratorNotice('')
-                  }}
-                >
-                  <span>{configuratorCards[configuratorStep]}</span>
-                  <strong>
-                    {configuratorSelections[configuratorStep] ? 'Выбрано' : 'Выбрать'}
-                  </strong>
-                </button>
+                <div className="configurator-card-heading">
+                  <span>{configuratorCards[configuratorStep].title}</span>
+                  <h3>{configuratorCards[configuratorStep].question}</h3>
+                </div>
+
+                {configuratorStep === 0 && (
+                  <label className="configurator-wish">
+                    <span>Опишите пожелание своими словами</span>
+                    <textarea
+                      rows={7}
+                      maxLength={4000}
+                      value={configuratorWish}
+                      onChange={(event) => setConfiguratorWish(event.target.value)}
+                      placeholder="Например: хочу напряжённый фильм на вечер, но без тяжёлого финала. Смотреть будем вдвоём, времени около двух часов."
+                    />
+                  </label>
+                )}
+
+                {configuratorStep === 1 && (
+                  <div className="configurator-selector">
+                    <div className="configurator-library-controls">
+                      <input
+                        type="search"
+                        value={configuratorSearch}
+                        onChange={(event) => setConfiguratorSearch(event.target.value)}
+                        placeholder="Название фильма"
+                        aria-label="Поиск фильма-ориентира"
+                      />
+                      <select
+                        value={referenceGenre}
+                        onChange={(event) => setReferenceGenre(event.target.value)}
+                        aria-label="Фильтр фильмов-ориентиров по жанру"
+                      >
+                        <option value="">Все жанры</option>
+                        {knownGenres.map((item) => (
+                          <option value={item} key={item}>{item}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={referenceSort}
+                        onChange={(event) => setReferenceSort(event.target.value as LibrarySort)}
+                        aria-label="Сортировка фильмов-ориентиров"
+                      >
+                        <option value="release_desc">Сначала новые</option>
+                        <option value="release_asc">Сначала старые</option>
+                        <option value="title_asc">По названию</option>
+                        <option value="rating_desc">По моей оценке</option>
+                      </select>
+                    </div>
+                    {!normalizedReferenceSearch && !referenceGenre && (
+                      <p className="configurator-search-hint">
+                        Начните вводить название — результаты появятся здесь.
+                      </p>
+                    )}
+                    {(normalizedReferenceSearch || referenceGenre) && referenceResults.length === 0 && (
+                      <p className="configurator-search-hint">Фильмы не найдены.</p>
+                    )}
+                    <div className="configurator-choice-list configurator-movie-results">
+                      {referenceResults.map((movie) => {
+                          const selected = referenceSelections.find(
+                            (item) => item.id === String(movie.id),
+                          )
+                          return (
+                            <label key={movie.id}>
+                              {movie.poster ? (
+                                <img src={movie.poster} alt="" />
+                              ) : (
+                                <span className="configurator-poster-fallback">Нет постера</span>
+                              )}
+                              <span>
+                                <strong>{movie.title}</strong>
+                                {movie.originalTitle !== movie.title && (
+                                  <small>{movie.originalTitle}</small>
+                                )}
+                                <small>{movie.year} · {movie.genre}</small>
+                              </span>
+                              <select
+                                value={selected?.relation ?? ''}
+                                onChange={(event) =>
+                                  setReferenceSelections((current) =>
+                                    updateSelection(
+                                      current,
+                                      String(movie.id),
+                                      `${movie.title} (${movie.year})`,
+                                      event.target.value as ReferenceRelation | '',
+                                    ),
+                                  )
+                                }
+                              >
+                                <option value="">Не учитывать</option>
+                                <option value="similar">Похожее</option>
+                                <option value="avoid">Не похожее</option>
+                              </select>
+                            </label>
+                          )
+                        })}
+                    </div>
+                    {referenceSelections.length > 0 && (
+                      <div className="configurator-selected-items">
+                        <strong>Выбрано</strong>
+                        {referenceSelections.map((item) => (
+                          <button
+                            type="button"
+                            key={item.id}
+                            onClick={() => setReferenceSelections((current) =>
+                              current.filter((selection) => selection.id !== item.id))}
+                          >
+                            {item.label} ×
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {configuratorStep === 2 && (
+                  <div className="configurator-selector">
+                    <div className="configurator-genre-filter">
+                      <select
+                        value={genreCandidate}
+                        onChange={(event) => setGenreCandidate(event.target.value)}
+                        aria-label="Выберите жанр"
+                      >
+                        <option value="">Выберите жанр</option>
+                        {knownGenres.map((item) => (
+                          <option value={item} key={item}>{item}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={genreCandidateRelation}
+                        onChange={(event) => setGenreCandidateRelation(
+                          event.target.value as PreferenceRelation,
+                        )}
+                        aria-label="Значение жанра для подбора"
+                      >
+                        <option value="prefer">Желательно</option>
+                        <option value="require">Обязательно</option>
+                        <option value="exclude">Исключить</option>
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!genreCandidate}
+                        onClick={() => {
+                          setGenreSelections((current) => updateSelection(
+                            current,
+                            genreCandidate,
+                            genreCandidate,
+                            genreCandidateRelation,
+                          ))
+                          setGenreCandidate('')
+                        }}
+                      >
+                        Добавить
+                      </button>
+                    </div>
+                    <div className="configurator-choice-list">
+                      {genreSelections.map((item) => (
+                        <label key={item.id}>
+                          <strong>{item.label}</strong>
+                          <select
+                            value={item.relation}
+                            onChange={(event) => setGenreSelections((current) =>
+                              updateSelection(
+                                current,
+                                item.id,
+                                item.label,
+                                event.target.value as PreferenceRelation | '',
+                              ))}
+                          >
+                            <option value="prefer">Желательно</option>
+                            <option value="require">Обязательно</option>
+                            <option value="exclude">Исключить</option>
+                            <option value="">Удалить</option>
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {configuratorStep === 3 && (
+                  <div className="configurator-constraints">
+                    <label>
+                      <span>Год выпуска от</span>
+                      <input
+                        type="number"
+                        min="1888"
+                        max="2200"
+                        value={configuratorConstraints.yearFrom}
+                        onChange={(event) => setConfiguratorConstraints(
+                          (current) => ({ ...current, yearFrom: event.target.value }),
+                        )}
+                      />
+                    </label>
+                    <label>
+                      <span>Год выпуска до</span>
+                      <input
+                        type="number"
+                        min="1888"
+                        max="2200"
+                        value={configuratorConstraints.yearTo}
+                        onChange={(event) => setConfiguratorConstraints(
+                          (current) => ({ ...current, yearTo: event.target.value }),
+                        )}
+                      />
+                    </label>
+                    <label>
+                      <span>Не дольше, минут</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={configuratorConstraints.maxRuntimeMinutes}
+                        onChange={(event) => setConfiguratorConstraints(
+                          (current) => ({
+                            ...current,
+                            maxRuntimeMinutes: event.target.value,
+                          }),
+                        )}
+                      />
+                    </label>
+                    {[
+                      ['country', 'Страна'],
+                      ['certification', 'Возрастной рейтинг'],
+                      ['language', 'Язык'],
+                    ].map(([field, label]) => (
+                      <label key={field}>
+                        <span>{label}</span>
+                        <input
+                          type="text"
+                          value={configuratorConstraints[
+                            field as 'country' | 'certification' | 'language'
+                          ]}
+                          onChange={(event) => setConfiguratorConstraints(
+                            (current) => ({
+                              ...current,
+                              [field]: event.target.value,
+                            }),
+                          )}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
 
                 <div className="configurator-actions">
                   <button
@@ -1512,6 +2254,134 @@ function App() {
               )}
             </span>
           </span>
+        </div>
+      )}
+
+      {isTelegramSettingsOpen && (
+        <div
+          className="settings-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="telegram-settings-title"
+          onClick={() => setIsTelegramSettingsOpen(false)}
+        >
+          <section className="settings-modal" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="movie-modal-close"
+              onClick={() => setIsTelegramSettingsOpen(false)}
+              aria-label="Закрыть настройки"
+            >
+              ×
+            </button>
+            <span className="eyebrow">TELEGRAM</span>
+            <h2 id="telegram-settings-title">Настройка чат-бота</h2>
+            <p>
+              Сюда отправляются международное название фильма и имя файла с ID карточки.
+            </p>
+            <ol className="telegram-setup-help">
+              <li>Создайте бота через BotFather и скопируйте выданный Bot Token.</li>
+              <li>Напишите созданному боту любое сообщение.</li>
+              <li>Укажите числовой Chat ID чата, куда отправлять запросы.</li>
+            </ol>
+            <label>
+              <span>Bot Token — токен, полученный от BotFather</span>
+              <input
+                type="password"
+                value={telegramBotToken}
+                placeholder={telegramConfigured ? 'Оставьте пустым, чтобы не менять' : 'Токен от BotFather'}
+                onChange={(event) => setTelegramBotToken(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              <span>Chat ID — числовой идентификатор чата</span>
+              <input
+                type="text"
+                value={telegramChatId}
+                onChange={(event) => setTelegramChatId(event.target.value)}
+              />
+            </label>
+            {telegramSettingsStatus && <p className="settings-status">{telegramSettingsStatus}</p>}
+            <div className="settings-actions">
+              <button
+                type="button"
+                onClick={sendTelegramTest}
+                disabled={!telegramConfigured || isSavingTelegramSettings}
+              >
+                Проверить
+              </button>
+              <button
+                type="button"
+                className="settings-save"
+                onClick={submitTelegramSettings}
+                disabled={!telegramChatId.trim() || isSavingTelegramSettings}
+              >
+                {isSavingTelegramSettings ? 'Сохраняем…' : 'Сохранить'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isAPICredentialsOpen && (
+        <div
+          className="settings-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="api-credentials-title"
+          onClick={() => setIsAPICredentialsOpen(false)}
+        >
+          <section className="settings-modal" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="movie-modal-close"
+              onClick={() => setIsAPICredentialsOpen(false)}
+              aria-label="Закрыть настройки API"
+            >
+              ×
+            </button>
+            <span className="eyebrow">ИНТЕГРАЦИИ</span>
+            <h2 id="api-credentials-title">API-ключи</h2>
+            <p>
+              Ключи сохраняются локально и автоматически подключаются при каждом запуске backend.
+            </p>
+            <label>
+              <span>Replicate API Token — доступ к Google Gemini 3 Flash</span>
+              <input
+                type="password"
+                value={replicateApiToken}
+                placeholder={replicateConfigured ? 'Настроен — оставьте пустым, чтобы не менять' : 'r8_…'}
+                onChange={(event) => setReplicateApiToken(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              <span>TMDB Read Access Token — данные о фильмах и людях</span>
+              <input
+                type="password"
+                value={tmdbReadAccessToken}
+                placeholder={tmdbConfigured ? 'Настроен — оставьте пустым, чтобы не менять' : 'Токен TMDB API Read Access'}
+                onChange={(event) => setTmdbReadAccessToken(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            {apiCredentialsStatus && <p className="settings-status">{apiCredentialsStatus}</p>}
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="settings-save"
+                onClick={submitAPICredentials}
+                disabled={
+                  isSavingAPICredentials
+                  || (!replicateApiToken.trim() && !replicateConfigured)
+                  || (!tmdbReadAccessToken.trim() && !tmdbConfigured)
+                }
+              >
+                {isSavingAPICredentials ? 'Сохраняем…' : 'Сохранить ключи'}
+              </button>
+            </div>
+          </section>
         </div>
       )}
 

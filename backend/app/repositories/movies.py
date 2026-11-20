@@ -148,8 +148,9 @@ class MovieRepository:
         with self.database.connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, tmdb_movie_id, local_movie_id, title, status,
-                       requested_at
+                SELECT id, tmdb_movie_id, local_movie_id, title,
+                       international_title, file_name, telegram_message_id,
+                       status, requested_at
                 FROM movie_download_requests
                 WHERE status = 'requested'
                 ORDER BY requested_at DESC, id DESC
@@ -163,35 +164,80 @@ class MovieRepository:
         tmdb_movie_id: int,
         local_movie_id: int | None,
         title: str,
+        international_title: str | None = None,
+        file_name: str | None = None,
+        telegram_message_id: int | None = None,
     ) -> dict[str, Any]:
         with self.database.connect() as connection:
             connection.execute(
                 """
                 INSERT INTO movie_download_requests (
-                    tmdb_movie_id, local_movie_id, title, status
-                ) VALUES (?, ?, ?, 'requested')
+                    tmdb_movie_id, local_movie_id, title, international_title,
+                    file_name, telegram_message_id, status
+                ) VALUES (?, ?, ?, ?, ?, ?, 'requested')
                 ON CONFLICT(tmdb_movie_id) DO UPDATE SET
                     local_movie_id = COALESCE(
                         excluded.local_movie_id,
                         movie_download_requests.local_movie_id
                     ),
                     title = excluded.title,
+                    international_title = excluded.international_title,
+                    file_name = excluded.file_name,
+                    telegram_message_id = excluded.telegram_message_id,
                     status = 'requested',
                     requested_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
                 """,
-                (tmdb_movie_id, local_movie_id, title),
+                (
+                    tmdb_movie_id,
+                    local_movie_id,
+                    title,
+                    international_title,
+                    file_name,
+                    telegram_message_id,
+                ),
             )
             row = connection.execute(
                 """
-                SELECT id, tmdb_movie_id, local_movie_id, title, status,
-                       requested_at
+                SELECT id, tmdb_movie_id, local_movie_id, title,
+                       international_title, file_name, telegram_message_id,
+                       status, requested_at
                 FROM movie_download_requests
                 WHERE tmdb_movie_id = ?
                 """,
                 (tmdb_movie_id,),
             ).fetchone()
             return dict(row)
+
+    def mark_downloading(self, movie_id: int) -> dict[str, Any] | None:
+        with self.database.connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM movies WHERE id = ?", (movie_id,)
+            ).fetchone()
+            if exists is None:
+                return None
+            updated = connection.execute(
+                """
+                UPDATE movie_files
+                SET status = 'downloading'
+                WHERE movie_id = ? AND status != 'available'
+                """,
+                (movie_id,),
+            ).rowcount
+            if updated == 0:
+                has_available = connection.execute(
+                    """
+                    SELECT 1 FROM movie_files
+                    WHERE movie_id = ? AND status = 'available'
+                    """,
+                    (movie_id,),
+                ).fetchone()
+                if has_available is None:
+                    connection.execute(
+                        "INSERT INTO movie_files (movie_id, status) VALUES (?, 'downloading')",
+                        (movie_id,),
+                    )
+            return self._get_movie(connection, movie_id)
 
     def list_taste_tags(self) -> list[dict[str, Any]]:
         with self.database.connect() as connection:

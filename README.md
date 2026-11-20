@@ -81,9 +81,39 @@ Available API operations:
     PATCH /api/movies/{movie_id}/user-data
     GET /api/people/{person_id}
     POST /api/people/sync
+    POST /api/agents/movie-recommender/recommend
+    POST /api/agents/movie-recommender/recommend/jobs
+    GET /api/agents/movie-recommender/recommend/jobs/{job_id}
+    POST /api/agents/movie-recommender/recommend/jobs/{job_id}/cancel
+    POST /api/agents/movie-recommender/sessions/{session_id}/promote
+    POST /api/agents/movie-recommender/sessions/{session_id}/promote-many
+    POST /api/movies/download-requests/by-tmdb
+    GET /api/movies/telegram-settings
+    PUT /api/movies/telegram-settings
+    POST /api/movies/telegram-settings/test
 
 The list endpoint supports `search`, `watched`, `inWishlist`, `availability`
 and `genre` query parameters.
+
+The recommender rebuilds an evidence-based taste profile from watched movies on
+every request, combines it with configurator answers and asks Gemini for an exact
+number of recommendations. Movie Librarian 1 resolves every recommendation and
+builds full TMDB cards in a process-local temporary catalog. Temporary sessions
+expire after 24 hours. Promoting a recommendation imports it with
+`watched=false`, marks it as downloading, creates a download request and
+synchronizes its people records.
+
+Recommendations selected from the temporary catalog are processed together and
+sent to the configured Telegram chat in one message. A film selected from a
+person's filmography uses the same TMDB import, people synchronization and
+Telegram pipeline. Each entry contains the movie's international title and a filesystem-safe name in the form
+`CL-000123_International_Title`; the numeric prefix is the permanent movie-card
+ID. Configure the bot token and Chat ID from the restored left sidebar. The token
+is stored locally in the application database and is never returned by the API.
+
+The frontend uses recommendation jobs so it can show an ordered process log and
+request cooperative cancellation. Cancellation takes effect at the next safe
+checkpoint; an already running Replicate or TMDB HTTP request is allowed to finish.
 
 ## Frontend
 

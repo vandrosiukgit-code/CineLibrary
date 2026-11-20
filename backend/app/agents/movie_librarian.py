@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
 from app.clients.replicate_gemini import ReplicateAPIError, ReplicateGeminiClient
 from app.clients.tmdb import TMDBAPIError, TMDBClient
+from app.core.cancellation import OperationCancelled
 from app.repositories.movies import MovieRepository
 from app.schemas.movie_research import (
     MovieIdentification,
@@ -56,15 +58,21 @@ class MovieLibrarian:
         tmdb: TMDBClient,
         repository: MovieRepository,
         builder: MovieCardBuilder | None = None,
+        mode: Literal["library", "recommendation"] = "library",
+        cancelled: Callable[[], bool] | None = None,
     ) -> None:
         self.brain = brain
         self.tmdb = tmdb
         self.repository = repository
         self.builder = builder or MovieCardBuilder()
+        self.mode = mode
+        self.cancelled = cancelled or (lambda: False)
 
     def research_movies(self, movie_inputs: list[str]) -> list[MovieLibrarianResult]:
         results: list[MovieLibrarianResult] = []
         for movie_input in movie_inputs:
+            if self.cancelled():
+                raise OperationCancelled()
             try:
                 results.append(self.research_movie(movie_input))
             except (ReplicateAPIError, TMDBAPIError, MovieLibrarianOutputError,
@@ -129,6 +137,8 @@ class MovieLibrarian:
         observed_tmdb_ids: set[int] = set()
 
         for _ in range(self.MAX_TOOL_ROUNDS):
+            if self.cancelled():
+                raise OperationCancelled()
             command = self.brain.next_action(
                 IDENTIFICATION_PROMPT, movie_input, history
             )
@@ -192,6 +202,9 @@ class MovieLibrarian:
             history.append(
                 {"action": name, "arguments": arguments, "result": result}
             )
+
+            if self.cancelled():
+                raise OperationCancelled()
 
         raise MovieLibrarianOutputError("Movie identification exceeded tool limit")
 

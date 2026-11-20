@@ -1,0 +1,2 @@
+class OperationCancelled(RuntimeError):
+    pass

@@ -23,6 +23,7 @@ def research_movies(payload: MovieResearchRequest, request: Request):
             brain=ReplicateGeminiClient.from_environment(),
             tmdb=TMDBClient.from_environment(),
             repository=request.app.state.movie_repository,
+            mode=payload.mode,
         )
     except (ReplicateConfigurationError, TMDBConfigurationError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error

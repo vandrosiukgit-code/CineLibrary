@@ -70,6 +70,26 @@ class ReplicateGeminiClient:
         )
         return self._parse_action(output)
 
+    def generate_json(
+        self,
+        system_instruction: str,
+        payload: dict[str, Any],
+        *,
+        temperature: float = 0.2,
+        max_output_tokens: int = 4096,
+    ) -> Any:
+        output = self._run(
+            {
+                "prompt": json.dumps(payload, ensure_ascii=False),
+                "system_instruction": system_instruction,
+                "thinking_level": self.thinking_level,
+                "temperature": temperature,
+                "top_p": 0.95,
+                "max_output_tokens": max_output_tokens,
+            }
+        )
+        return self._parse_json(output)
+
     def _run(self, model_input: dict[str, Any]) -> str:
         prediction = self._request(
             "POST",
@@ -131,14 +151,18 @@ class ReplicateGeminiClient:
 
     @staticmethod
     def _parse_action(output: str) -> dict[str, Any]:
+        action = ReplicateGeminiClient._parse_json(output)
+        if not isinstance(action, dict):
+            raise ReplicateAPIError("Gemini action must be a JSON object")
+        return action
+
+    @staticmethod
+    def _parse_json(output: str) -> Any:
         text = output.strip()
         if text.startswith("```") and text.endswith("```"):
             lines = text.splitlines()
             text = "\n".join(lines[1:-1]).strip()
         try:
-            action = json.loads(text)
+            return json.loads(text)
         except json.JSONDecodeError as error:
-            raise ReplicateAPIError("Gemini returned invalid action JSON") from error
-        if not isinstance(action, dict):
-            raise ReplicateAPIError("Gemini action must be a JSON object")
-        return action
+            raise ReplicateAPIError("Gemini returned invalid JSON") from error

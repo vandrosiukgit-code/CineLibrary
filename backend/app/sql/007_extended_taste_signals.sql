@@ -1,0 +1,27 @@
+INSERT OR IGNORE INTO tags (name, code, category, sentiment, sort_order) VALUES
+    ('Интеллектуальная составляющая — понравилась', 'strength:intellectual', 'strength', 1, 90),
+    ('Непредсказуемость — понравилась', 'strength:unpredictability', 'strength', 1, 100),
+    ('Психологическая глубина — понравилась', 'strength:psychological_depth', 'strength', 1, 110),
+    ('Реалистичность — понравилась', 'strength:realism', 'strength', 1, 120),
+    ('Темп — понравился', 'strength:pace', 'strength', 1, 130),
+    ('Юмор — понравился', 'strength:humor', 'strength', 1, 140),
+    ('Открытый финал — понравился', 'strength:open_ending', 'strength', 1, 150),
+    ('Моральная неоднозначность — понравилась', 'strength:moral_ambiguity', 'strength', 1, 160),
+    ('Уровень насилия — подошёл', 'strength:violence_level', 'strength', 1, 170),
+    ('Экспериментальный стиль — понравился', 'strength:experimental', 'strength', 1, 180),
+    ('Эмоциональная тяжесть — подошла', 'strength:emotional_weight', 'strength', 1, 190),
+    ('Романтическая линия — понравилась', 'strength:romance', 'strength', 1, 200),
+    ('Интеллектуальная составляющая — не понравилась', 'weakness:intellectual', 'weakness', -1, 90),
+    ('Непредсказуемость — не понравилась', 'weakness:unpredictability', 'weakness', -1, 100),
+    ('Психологическая глубина — не понравилась', 'weakness:psychological_depth', 'weakness', -1, 110),
+    ('Реалистичность — не понравилась', 'weakness:realism', 'weakness', -1, 120),
+    ('Темп — не понравился', 'weakness:pace', 'weakness', -1, 130),
+    ('Юмор — не понравился', 'weakness:humor', 'weakness', -1, 140),
+    ('Открытый финал — не понравился', 'weakness:open_ending', 'weakness', -1, 150),
+    ('Моральная неоднозначность — не понравилась', 'weakness:moral_ambiguity', 'weakness', -1, 160),
+    ('Уровень насилия — не подошёл', 'weakness:violence_level', 'weakness', -1, 170),
+    ('Экспериментальный стиль — не понравился', 'weakness:experimental', 'weakness', -1, 180),
+    ('Эмоциональная тяжесть — не подошла', 'weakness:emotional_weight', 'weakness', -1, 190),
+    ('Романтическая линия — не понравилась', 'weakness:romance', 'weakness', -1, 200);
+
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (7);

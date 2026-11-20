@@ -26,6 +26,7 @@ class StrictModel(BaseModel):
 
 class MovieResearchRequest(StrictModel):
     movies: list[str] = Field(min_length=1, max_length=10)
+    mode: Literal["library", "recommendation"] = "library"
 
     @field_validator("movies")
     @classmethod

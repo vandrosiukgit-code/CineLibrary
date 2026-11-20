@@ -5,11 +5,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.movie_librarian import router as movie_librarian_router
+from app.api.routes.movie_recommender import router as movie_recommender_router
 from app.api.routes.movies import router as movies_router
 from app.api.routes.people import router as people_router
+from app.api.routes.settings import router as settings_router
 from app.database import MovieDatabase
 from app.repositories.movies import MovieRepository
 from app.repositories.people import PeopleRepository
+from app.repositories.recommendation_sessions import RecommendationSessionStore
+from app.services.recommendation_jobs import RecommendationJobManager
+from app.services.telegram_delivery import TelegramDeliveryService
+from app.services.api_credentials import APICredentialsService
 
 
 def create_app(
@@ -25,6 +31,11 @@ def create_app(
             database.seed(seed_path)
         application.state.movie_repository = MovieRepository(database)
         application.state.people_repository = PeopleRepository(database)
+        application.state.recommendation_sessions = RecommendationSessionStore()
+        application.state.recommendation_jobs = RecommendationJobManager()
+        application.state.telegram_delivery = TelegramDeliveryService(database)
+        application.state.api_credentials = APICredentialsService(database)
+        application.state.api_credentials.apply_saved_credentials()
         yield
 
     application = FastAPI(
@@ -46,7 +57,9 @@ def create_app(
     )
     application.include_router(movies_router)
     application.include_router(movie_librarian_router)
+    application.include_router(movie_recommender_router)
     application.include_router(people_router)
+    application.include_router(settings_router)
 
     @application.get("/")
     def root():

@@ -39,6 +39,7 @@ export interface MovieView {
   overview: string
   director: MovieCredit | null
   actors: MovieCredit[]
+  people: MovieCredit[]
   availability: AvailabilityStatus
   watched: boolean
   personalRating: number | null
@@ -64,6 +65,7 @@ function toMovieView(movie: MovieRecord): MovieView {
     director:
       movie.credits.find((credit) => credit.creditType === 'director') ?? null,
     actors: movie.credits.filter((credit) => credit.creditType === 'actor'),
+    people: movie.credits,
     availability: movie.availability,
     watched: movie.userData.watched,
     personalRating: movie.userData.personalRating,
@@ -88,8 +90,75 @@ export interface DownloadRequest {
   tmdbMovieId: number
   localMovieId: number | null
   title: string
+  internationalTitle: string | null
+  fileName: string | null
+  telegramMessageId: number | null
   status: 'requested' | 'completed' | 'cancelled'
   requestedAt: string
+}
+
+export interface TelegramSettings {
+  configured: boolean
+  chatId: string | null
+  updatedAt: string | null
+}
+
+export interface APICredentialsSettings {
+  replicateConfigured: boolean
+  tmdbConfigured: boolean
+  updatedAt: string | null
+}
+
+async function readApiError(response: Response, fallback: string) {
+  const body = (await response.json().catch(() => null)) as
+    | { detail?: string }
+    | null
+  return new Error(body?.detail || fallback)
+}
+
+export async function loadTelegramSettings(): Promise<TelegramSettings> {
+  const response = await fetch(`${API_URL}/telegram-settings`)
+  if (!response.ok) throw await readApiError(response, 'Не удалось загрузить настройки')
+  return (await response.json()) as TelegramSettings
+}
+
+export async function saveTelegramSettings(input: {
+  botToken?: string
+  chatId: string
+}): Promise<TelegramSettings> {
+  const response = await fetch(`${API_URL}/telegram-settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw await readApiError(response, 'Не удалось сохранить настройки')
+  return (await response.json()) as TelegramSettings
+}
+
+export async function testTelegramSettings(): Promise<void> {
+  const response = await fetch(`${API_URL}/telegram-settings/test`, {
+    method: 'POST',
+  })
+  if (!response.ok) throw await readApiError(response, 'Тестовое сообщение не отправлено')
+}
+
+export async function loadAPICredentials(): Promise<APICredentialsSettings> {
+  const response = await fetch('http://127.0.0.1:8000/api/settings/api-credentials')
+  if (!response.ok) throw await readApiError(response, 'Не удалось загрузить API-ключи')
+  return (await response.json()) as APICredentialsSettings
+}
+
+export async function saveAPICredentials(input: {
+  replicateApiToken?: string
+  tmdbReadAccessToken?: string
+}): Promise<APICredentialsSettings> {
+  const response = await fetch('http://127.0.0.1:8000/api/settings/api-credentials', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw await readApiError(response, 'Не удалось сохранить API-ключи')
+  return (await response.json()) as APICredentialsSettings
 }
 
 export async function loadDownloadRequests(
@@ -112,6 +181,21 @@ export async function requestMovieDownload(input: {
   })
   if (!response.ok) throw new Error('Не удалось отправить запрос на загрузку')
   return (await response.json()) as DownloadRequest
+}
+
+export async function requestMoviesByTmdb(
+  tmdbMovieIds: number[],
+): Promise<Array<{ movie: MovieRecord; downloadRequest: DownloadRequest }>> {
+  const response = await fetch(`${API_URL}/download-requests/by-tmdb`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tmdbMovieIds }),
+  })
+  if (!response.ok) throw await readApiError(response, 'Не удалось обработать фильмы')
+  return (await response.json()) as Array<{
+    movie: MovieRecord
+    downloadRequest: DownloadRequest
+  }>
 }
 
 export async function loadTasteTags(

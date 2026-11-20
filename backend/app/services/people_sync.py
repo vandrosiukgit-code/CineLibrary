@@ -29,7 +29,7 @@ class PeopleSynchronizer:
             return summary
 
         summary["movies_processed"] = 1
-        for credit in self._selected_credits(credits):
+        for credit in self.selected_credits(credits):
             tmdb_person_id = credit["tmdb_person_id"]
             person = self.repository.find_by_tmdb_id(tmdb_person_id)
             if person is None or self.repository.refresh_is_due(person):
@@ -51,7 +51,7 @@ class PeopleSynchronizer:
             summary["links_updated"] += 1
         return summary
 
-    def _selected_credits(self, credits: dict[str, Any]) -> list[dict[str, Any]]:
+    def selected_credits(self, credits: dict[str, Any]) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
         seen: set[tuple[int, str]] = set()
         actors = sorted(
