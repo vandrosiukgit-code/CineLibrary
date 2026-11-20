@@ -84,6 +84,18 @@ class TMDBClient:
         english = self._get(f"/movie/{tmdb_id}", {"language": "en-US"})
         return {"localized": localized, "english": english}
 
+    def get_movie_credits(self, tmdb_id: int) -> dict[str, Any]:
+        return self._get(f"/movie/{tmdb_id}/credits", {"language": "ru-RU"})
+
+    def get_person_bundle(self, person_id: int) -> dict[str, Any]:
+        return self._get(
+            f"/person/{person_id}",
+            {
+                "language": "ru-RU",
+                "append_to_response": "external_ids,movie_credits,translations",
+            },
+        )
+
     def _get(self, path: str, parameters: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}{path}?{urlencode(parameters)}"
         return self.transport(

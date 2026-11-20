@@ -2,6 +2,32 @@
 
 Personal Cinematic Knowledge Management System.
 
+## Быстрый запуск
+
+Откройте два окна PowerShell.
+
+В первом окне запустите backend:
+
+```powershell
+cd D:\КИНО\CineLibrary
+.\.venv\Scripts\Activate.ps1
+cd backend
+uvicorn app.main:app --reload
+```
+
+Во втором окне запустите frontend:
+
+```powershell
+cd D:\КИНО\CineLibrary\frontend
+npm run dev
+```
+
+Откройте приложение: http://localhost:5173
+
+Документация API: http://127.0.0.1:8000/docs
+
+Для остановки сервера нажмите `Ctrl+C` в соответствующем окне.
+
 ## Project location
 
 D:\КИНО\CineLibrary
@@ -34,17 +60,27 @@ http://127.0.0.1:8000/docs
 
 ## Movie Database
 
-The backend creates `data\movies.db` automatically on first startup. The
-database schema and the reproducible five-movie test dataset are stored in:
+The backend creates an empty `data\movies.db` automatically on first startup.
+Database migrations are stored in:
 
     backend\app\sql\001_initial_schema.sql
-    backend\app\sql\test_seed.sql
+    backend\app\sql\002_add_tmdb_rating.sql
+
+The reproducible five-movie demo dataset is used only by tests and is stored in:
+
+    backend\tests\fixtures\demo_movie_catalog.sql
+
+Local SQLite files are ignored by Git. `data\movies-demo.db` is a recoverable
+backup of the former demo catalog; `data\movies.db` is the real catalog.
 
 Available API operations:
 
     GET /api/movies
     GET /api/movies/{movie_id}
+    POST /api/movies/import
     PATCH /api/movies/{movie_id}/user-data
+    GET /api/people/{person_id}
+    POST /api/people/sync
 
 The list endpoint supports `search`, `watched`, `inWishlist`, `availability`
 and `genre` query parameters.
@@ -95,5 +131,20 @@ outside this agent's responsibilities. TMDB rating is stored separately;
 
 ## Current limitations
 
-People Database, draft approval/import and a separate IMDb-rating source are not
-connected yet.
+Draft approval/import and a separate IMDb-rating source are not connected yet.
+
+## People catalog
+
+Movie imports start a background TMDB synchronization for their key cast and crew.
+Person cards store a profile photo, biography, external IDs, movie credits and the
+date of the last successful refresh. Fresh cards are reused; cards older than six
+calendar months are replaced from TMDB. Movie-person links are updated on every
+sync, even when the person card itself is still fresh.
+
+Run a full catalog synchronization with:
+
+    POST /api/people/sync
+
+Or synchronize one movie after a metadata update:
+
+    POST /api/people/sync?movieId=1

@@ -219,11 +219,27 @@ def test_research_endpoint_uses_gemini_and_tmdb_tools(monkeypatch, tmp_path):
             "/api/agents/movie-librarian-1/research",
             json={"movies": ["Drive My Car"]},
         )
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "draft_ready"
+        assert result["movie"]["originalTitle"] == "ドライブ・マイ・カー"
 
-    assert response.status_code == 200
-    result = response.json()["results"][0]
-    assert result["status"] == "draft_ready"
-    assert result["movie"]["originalTitle"] == "ドライブ・マイ・カー"
+        import_response = client.post(
+            "/api/movies/import",
+            json={
+                "movie": result["movie"],
+                "sources": result["sources"],
+                "watched": True,
+                "availability": "missing",
+            },
+        )
+        assert import_response.status_code == 201
+        imported = import_response.json()
+        assert imported["tmdbId"] == 758866
+        assert imported["tmdbRating"] == 7.4
+        assert imported["imdbRating"] is None
+        assert imported["userData"]["watched"] is True
+        assert len(client.get("/api/movies").json()) == 1
 
 
 def test_research_endpoint_requires_both_api_credentials(monkeypatch, tmp_path):

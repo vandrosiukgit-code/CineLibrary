@@ -6,10 +6,10 @@ INSERT INTO genres (id, canonical_name, display_name) VALUES
     (5, 'Adventure', 'Приключения');
 
 INSERT INTO tags (id, name) VALUES
-    (1, 'Хорошая атмосфера'),
-    (2, 'Оригинальная идея'),
-    (3, 'Интересный сюжет'),
-    (4, 'Эмоциональная глубина');
+    (1001, 'Хорошая атмосфера'),
+    (1002, 'Оригинальная идея'),
+    (1003, 'Интересный сюжет'),
+    (1004, 'Эмоциональная глубина');
 
 INSERT INTO movies (
     id, title, original_title, release_year, tmdb_id, imdb_id,
@@ -62,9 +62,9 @@ INSERT INTO movie_user_data (
     (5, 1, 5, '', 0);
 
 INSERT INTO movie_tags (movie_id, tag_id) VALUES
-    (1, 1), (1, 2),
-    (2, 3), (2, 4),
-    (5, 3), (5, 4);
+    (1, 1001), (1, 1002),
+    (2, 1003), (2, 1004),
+    (5, 1003), (5, 1004);
 
 INSERT INTO movie_files (movie_id, status) VALUES
     (1, 'available'),

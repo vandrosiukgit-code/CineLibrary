@@ -6,17 +6,25 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.movie_librarian import router as movie_librarian_router
 from app.api.routes.movies import router as movies_router
+from app.api.routes.people import router as people_router
 from app.database import MovieDatabase
 from app.repositories.movies import MovieRepository
+from app.repositories.people import PeopleRepository
 
 
-def create_app(database_path: Path | str | None = None) -> FastAPI:
+def create_app(
+    database_path: Path | str | None = None,
+    seed_path: Path | str | None = None,
+) -> FastAPI:
     database = MovieDatabase(database_path)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         database.initialize()
+        if seed_path is not None:
+            database.seed(seed_path)
         application.state.movie_repository = MovieRepository(database)
+        application.state.people_repository = PeopleRepository(database)
         yield
 
     application = FastAPI(
@@ -38,6 +46,7 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
     )
     application.include_router(movies_router)
     application.include_router(movie_librarian_router)
+    application.include_router(people_router)
 
     @application.get("/")
     def root():

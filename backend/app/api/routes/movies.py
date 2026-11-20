@@ -1,12 +1,36 @@
+import logging
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 
-from app.repositories.movies import MovieRepository
-from app.schemas.movies import MovieRead, UserDataUpdate
+from app.clients.tmdb import TMDBConfigurationError, TMDBClient
+from app.repositories.movies import (
+    MovieAlreadyExistsError,
+    MovieRepository,
+    UnknownTasteTagError,
+)
+from app.services.people_sync import PeopleSynchronizer
+from app.schemas.movies import (
+    DownloadRequestCreate,
+    DownloadRequestRead,
+    MovieDraftImportRequest,
+    MovieRead,
+    TasteTagRead,
+    UserDataUpdate,
+)
 
 
 router = APIRouter(prefix="/api/movies", tags=["movies"])
+logger = logging.getLogger(__name__)
+
+
+def sync_movie_people(
+    synchronizer: PeopleSynchronizer, movie_id: int, tmdb_id: int
+) -> None:
+    try:
+        synchronizer.sync_movie(movie_id, tmdb_id)
+    except Exception:
+        logger.exception("Automatic people sync failed for movie %s", movie_id)
 
 
 def get_repository(request: Request) -> MovieRepository:
@@ -21,6 +45,20 @@ def list_movies(
     in_wishlist: bool | None = Query(default=None, alias="inWishlist"),
     availability: Literal["available", "downloading", "missing"] | None = None,
     genre: str | None = None,
+    personal_rating_min: Annotated[
+        int | None, Query(alias="personalRatingMin", ge=1, le=5)
+    ] = None,
+    personal_rating_max: Annotated[
+        int | None, Query(alias="personalRatingMax", ge=1, le=5)
+    ] = None,
+    has_personal_rating: bool | None = Query(
+        default=None, alias="hasPersonalRating"
+    ),
+    has_taste_tags: bool | None = Query(default=None, alias="hasTasteTags"),
+    tag_code: str | None = Query(default=None, alias="tagCode", max_length=100),
+    sort: Literal[
+        "release_desc", "release_asc", "title_asc", "rating_desc"
+    ] = "release_desc",
 ):
     return get_repository(request).list_movies(
         search=search,
@@ -28,6 +66,77 @@ def list_movies(
         in_wishlist=in_wishlist,
         availability=availability,
         genre=genre,
+        personal_rating_min=personal_rating_min,
+        personal_rating_max=personal_rating_max,
+        has_personal_rating=has_personal_rating,
+        has_taste_tags=has_taste_tags,
+        tag_code=tag_code,
+        sort=sort,
+    )
+
+
+@router.post(
+    "/import",
+    response_model=MovieRead,
+    response_model_by_alias=True,
+    status_code=201,
+)
+def import_movie(
+    payload: MovieDraftImportRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        movie = get_repository(request).import_draft(payload)
+    except MovieAlreadyExistsError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    try:
+        tmdb = TMDBClient.from_environment()
+    except TMDBConfigurationError:
+        return movie
+    background_tasks.add_task(
+        sync_movie_people,
+        PeopleSynchronizer(tmdb, request.app.state.people_repository),
+        movie["id"],
+        movie["tmdb_id"],
+    )
+    return movie
+
+
+@router.get(
+    "/taste-tags",
+    response_model=list[TasteTagRead],
+    response_model_by_alias=True,
+)
+def list_taste_tags(request: Request):
+    return get_repository(request).list_taste_tags()
+
+
+@router.get("/genres", response_model=list[str])
+def list_genres(request: Request, watched: bool | None = None):
+    return get_repository(request).list_genres(watched=watched)
+
+
+@router.get(
+    "/download-requests",
+    response_model=list[DownloadRequestRead],
+    response_model_by_alias=True,
+)
+def list_download_requests(request: Request):
+    return get_repository(request).list_download_requests()
+
+
+@router.post(
+    "/download-requests",
+    response_model=DownloadRequestRead,
+    response_model_by_alias=True,
+    status_code=201,
+)
+def create_download_request(payload: DownloadRequestCreate, request: Request):
+    return get_repository(request).create_download_request(
+        tmdb_movie_id=payload.tmdb_movie_id,
+        local_movie_id=payload.local_movie_id,
+        title=payload.title,
     )
 
 
@@ -45,9 +154,12 @@ def get_movie(movie_id: int, request: Request):
     response_model_by_alias=True,
 )
 def update_user_data(movie_id: int, payload: UserDataUpdate, request: Request):
-    movie = get_repository(request).update_user_data(
-        movie_id, payload.model_dump(exclude_unset=True)
-    )
+    try:
+        movie = get_repository(request).update_user_data(
+            movie_id, payload.model_dump(exclude_unset=True)
+        )
+    except UnknownTasteTagError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
     return movie

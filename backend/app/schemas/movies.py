@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.movie_research import MovieCardDraft, MovieSourceDraft
+
 
 AvailabilityStatus = Literal["available", "downloading", "missing"]
 
@@ -23,6 +25,9 @@ class CreditRead(BaseModel):
     display_name: str = Field(serialization_alias="displayName")
     credit_type: str = Field(serialization_alias="creditType")
     sort_order: int = Field(serialization_alias="sortOrder")
+    character: str | None = None
+    department: str | None = None
+    job: str | None = None
 
 
 class SourceRead(BaseModel):
@@ -42,6 +47,36 @@ class UserDataRead(BaseModel):
     comment: str
     in_wishlist: bool = Field(serialization_alias="inWishlist")
     tags: list[str]
+    tag_codes: list[str] = Field(serialization_alias="tagCodes")
+
+
+class TasteTagRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    label: str
+    category: str
+    sentiment: int
+    sort_order: int = Field(serialization_alias="sortOrder")
+
+
+class DownloadRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    tmdb_movie_id: int = Field(alias="tmdbMovieId", gt=0)
+    local_movie_id: int | None = Field(default=None, alias="localMovieId", gt=0)
+    title: str = Field(min_length=1, max_length=500)
+
+
+class DownloadRequestRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    tmdb_movie_id: int = Field(serialization_alias="tmdbMovieId")
+    local_movie_id: int | None = Field(serialization_alias="localMovieId")
+    title: str
+    status: str
+    requested_at: str = Field(serialization_alias="requestedAt")
 
 
 class UserDataUpdate(BaseModel):
@@ -49,6 +84,23 @@ class UserDataUpdate(BaseModel):
     personal_rating: int | None = Field(default=None, alias="personalRating", ge=1, le=5)
     comment: str | None = Field(default=None, max_length=4000)
     in_wishlist: bool | None = Field(default=None, alias="inWishlist")
+    tag_codes: list[str] | None = Field(
+        default=None, alias="tagCodes", max_length=32
+    )
+
+
+class MovieDraftImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    movie: MovieCardDraft
+    sources: list[MovieSourceDraft]
+    watched: bool = True
+    personal_rating: int | None = Field(
+        default=None, alias="personalRating", ge=1, le=5
+    )
+    comment: str = Field(default="", max_length=4000)
+    in_wishlist: bool = Field(default=False, alias="inWishlist")
+    availability: AvailabilityStatus = "missing"
 
 
 class MovieRead(BaseModel):
@@ -67,6 +119,7 @@ class MovieRead(BaseModel):
     certification_country: str | None = Field(serialization_alias="certificationCountry")
     certification_rating: str | None = Field(serialization_alias="certificationRating")
     imdb_rating: float | None = Field(serialization_alias="imdbRating")
+    tmdb_rating: float | None = Field(serialization_alias="tmdbRating")
     is_new: bool = Field(serialization_alias="isNew")
     genres: list[GenreRead]
     credits: list[CreditRead]

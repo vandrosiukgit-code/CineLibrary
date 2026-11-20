@@ -18,6 +18,9 @@ export interface MovieCredit {
   displayName: string
   creditType: CreditType
   sortOrder: number
+  character: string | null
+  department: string | null
+  job: string | null
 }
 
 export interface MovieGenre {
@@ -32,6 +35,7 @@ export interface MovieUserData {
   comment: string
   inWishlist: boolean
   tags: string[]
+  tagCodes: string[]
 }
 
 export interface MovieRecord {
@@ -48,6 +52,7 @@ export interface MovieRecord {
   certificationCountry: string | null
   certificationRating: string | null
   imdbRating: number | null
+  tmdbRating: number | null
   isNew: boolean
   genres: MovieGenre[]
   credits: MovieCredit[]
@@ -61,4 +66,5 @@ export interface MovieUserDataUpdate {
   personalRating?: number | null
   comment?: string
   inWishlist?: boolean
+  tagCodes?: string[]
 }
