@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Замер окна Chrome · CineLibrary</title>
+    <style>
+      :root { color-scheme: dark; font: 100%/1.5 system-ui, sans-serif; }
+      body { margin: 0; background: #191c24; color: #eef1f7; }
+      main { box-sizing: border-box; max-width: 46rem; margin: auto; padding: 1rem; }
+      h1 { font-size: 1.5rem; }
+      label { display: block; margin-top: 1rem; }
+      button, input, textarea { box-sizing: border-box; font: inherit; border: 1px solid #8390a3; border-radius: .5rem; }
+      button, input { min-height: 44px; padding: .5rem .75rem; }
+      button { margin: .25rem .25rem .25rem 0; background: #354357; color: inherit; }
+      input, textarea { width: 100%; padding: .5rem; }
+      textarea { min-height: 10em; }
+      output { display: block; overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Замер окна Chrome</h1>
+      <p>Сделайте оба замера в портретном режиме, затем поверните телефон и повторите. Для второго замера откройте клавиатуру в поле ниже и держите её открытой до сигнала.</p>
+      <button type="button" id="normal">Замер без клавиатуры</button>
+      <button type="button" id="delayed">Замер с клавиатурой через 5 секунд</button>
+      <label for="keyboard">Поле для открытия клавиатуры</label>
+      <input id="keyboard" type="text" autocomplete="off">
+      <p id="status" role="status"></p>
+      <output id="live" aria-label="Текущие размеры"></output>
+      <label for="report">Отчёт для копирования</label>
+      <textarea id="report" readonly rows="7"></textarea>
+    </main>
+    <script>
+      const field = document.querySelector('#keyboard');
+      const live = document.querySelector('#live');
+      const status = document.querySelector('#status');
+      const report = document.querySelector('#report');
+      const normal = document.querySelector('#normal');
+      const delayed = document.querySelector('#delayed');
+      const samples = new Map();
+
+      function measure() {
+        const viewport = window.visualViewport;
+        const portrait = screen.orientation?.type.startsWith('portrait') ?? screen.width < screen.height;
+        const visibleWidth = viewport?.width ?? window.innerWidth;
+        const visibleHeight = viewport?.height ?? window.innerHeight;
+        const rounded = value => Math.round(value * 100) / 100;
+        return {
+          orientation: portrait ? 'Портрет' : 'Альбом',
+          sizes: `экран ${screen.width} × ${screen.height}, окно ${innerWidth} × ${innerHeight}, видимая область ${rounded(visibleWidth)} × ${rounded(visibleHeight)} CSS px, DPR ${devicePixelRatio}, масштаб ${viewport?.scale ?? 1}`,
+          height: visibleHeight,
+        };
+      }
+
+      function showLive() {
+        const reading = measure();
+        live.textContent = `${reading.orientation} · ${reading.sizes}`;
+      }
+
+      function capture(withKeyboard) {
+        const reading = measure();
+        const baseline = samples.get(`${reading.orientation} · без клавиатуры`);
+        if (withKeyboard && (document.activeElement !== field || (baseline && reading.height >= baseline.height))) {
+          status.textContent = 'Клавиатура не подтверждена. Повторите замер с открытой клавиатурой.';
+          return;
+        }
+        const label = `${reading.orientation} · ${withKeyboard ? 'с клавиатурой' : 'без клавиатуры'}`;
+        samples.set(label, reading);
+        report.value = [...samples].map(([name, value]) => `${name} · ${value.sizes}`).join('\n');
+        status.textContent = `Замер сохранён: ${label}. Всего ${samples.size} из 4.`;
+      }
+
+      normal.addEventListener('click', () => capture(false));
+      delayed.addEventListener('click', () => {
+        normal.disabled = delayed.disabled = true;
+        status.textContent = 'Замер через 5 секунд. Держите клавиатуру открытой.';
+        field.focus();
+        window.setTimeout(() => {
+          capture(true);
+          normal.disabled = delayed.disabled = false;
+        }, 5000);
+      });
+      window.addEventListener('resize', showLive);
+      window.visualViewport?.addEventListener('resize', showLive);
+      screen.orientation?.addEventListener('change', showLive);
+      showLive();
+    </script>
+  </body>
+</html>

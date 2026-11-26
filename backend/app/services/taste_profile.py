@@ -146,7 +146,6 @@ class TasteProfileBuilder:
             return None
 
         tag_signals: dict[int, dict[str, Any]] = {}
-        viewing_context: dict[int, dict[str, Any]] = {}
         source_counts = {"original": 0, "estimated": 0}
         for movie in movies:
             rating = movie["user_data"]["personal_rating"]
@@ -157,61 +156,59 @@ class TasteProfileBuilder:
             source = genome.get("source")
             if genome["status"] != "found" or source not in source_counts:
                 continue
-            strongest_tags = sorted(
-                genome["tags"], key=lambda tag: (-tag["relevance"], tag["tag_id"])
-            )[:12]
             source_weight = 0.5 if source == "estimated" else 1.0
-            # Three stars and absent ratings contribute only to viewing context.
-            weight = (rating - 3) * source_weight if rating is not None else 0.0
-            if weight:
+            rating_factor = (rating - 3) / 2 if rating is not None else 0.0
+            if rating_factor:
                 source_counts[source] += 1
-            count_key = "highRatedMovies" if weight > 0 else "lowRatedMovies"
-            for tag in strongest_tags:
+            count_key = "highRatedMovies" if rating_factor > 0 else "lowRatedMovies"
+            for tag in genome["tags"]:
                 relevance = tag["relevance"]
-                if relevance <= 0:
-                    continue
-                if not weight:
-                    context = viewing_context.setdefault(
-                        tag["tag_id"], {"name": tag["name"], "score": 0.0, "movies": 0}
-                    )
-                    context["score"] += source_weight * relevance
-                    context["movies"] += 1
-                    continue
                 signal = tag_signals.setdefault(
                     tag["tag_id"],
                     {
                         "name": tag["name"],
-                        "score": 0.0,
+                        "relevanceTotal": 0.0,
+                        "sourceWeightTotal": 0.0,
+                        "ratingTotal": 0.0,
+                        "movies": 0,
                         "highRatedMovies": 0,
                         "lowRatedMovies": 0,
                     },
                 )
-                signal["score"] += weight * relevance
-                signal[count_key] += 1
+                signal["relevanceTotal"] += source_weight * relevance
+                signal["sourceWeightTotal"] += source_weight
+                signal["ratingTotal"] += source_weight * relevance * rating_factor
+                signal["movies"] += 1
+                if relevance > 0 and rating_factor:
+                    signal[count_key] += 1
 
-        if not tag_signals and not viewing_context:
+        if not tag_signals:
             return None
-        ranked = sorted(
-            tag_signals.values(),
-            key=lambda signal: (-abs(signal["score"]), signal["name"]),
-        )
-        higher, lower = [], []
-        for signal in ranked:
-            score = round(signal["score"], 3)
-            if score:
-                (higher if score > 0 else lower).append({**signal, "score": score})
-        frequent_context = sorted(
-            viewing_context.values(),
-            key=lambda tag: (-tag["score"], tag["name"]),
-        )[:8]
+        features = []
+        for signal in tag_signals.values():
+            average = signal["relevanceTotal"] / signal["sourceWeightTotal"]
+            # Divide by all observations so sparse ratings and estimated DNA have less influence.
+            adjustment = signal["ratingTotal"] / signal["movies"]
+            features.append({
+                "name": signal["name"],
+                "movies": signal["movies"],
+                "averageRelevance": round(average, 3),
+                "score": round(adjustment, 3),
+                "weightedRelevance": round(average + adjustment, 3),
+                "highRatedMovies": signal["highRatedMovies"],
+                "lowRatedMovies": signal["lowRatedMovies"],
+            })
+        ranked = sorted(features, key=lambda feature: (-abs(feature["score"]), feature["name"]))
+        viewing_context = sorted(features, key=lambda feature: (-feature["averageRelevance"], feature["name"]))
         return {
             "ratedMoviesWithOriginal": source_counts["original"],
             "ratedMoviesWithEstimated": source_counts["estimated"],
-            "associatedWithHigherRatings": higher[:8],
-            "associatedWithLowerRatings": lower[:8],
+            "associatedWithHigherRatings": [feature for feature in ranked if feature["score"] > 0][:8],
+            "associatedWithLowerRatings": [feature for feature in ranked if feature["score"] < 0][:8],
             "viewingContext": [
-                {"name": tag["name"], "movies": tag["movies"]} for tag in frequent_context
-            ],
+                {key: feature[key] for key in ("name", "movies", "averageRelevance")}
+                for feature in viewing_context if feature["averageRelevance"] > 0
+            ][:8],
         }
 
     @staticmethod

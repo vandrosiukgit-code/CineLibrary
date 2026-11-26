@@ -1,6 +1,10 @@
+import json
+import os
+from pathlib import Path as LocalPath
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Request
+from pydantic import BaseModel, Field
 
 from app.agents.movie_librarian import MovieLibrarian
 from app.clients.replicate_gemini import (
@@ -22,11 +26,107 @@ from app.services.library_import import (
     parse_movie_list,
 )
 from app.services.movie_dna import MovieDNAError, MovieDNAService
+from app.services.media_sync import read_media_sync_settings, sync_lock, sync_media
 from app.services.people_sync import PeopleSynchronizer
 from app.services.recommendation_jobs import RecommendationJobNotFoundError
 
 
 router = APIRouter(prefix="/api/agents/movie-librarian-1", tags=["agents"])
+
+
+class MediaSyncSettings(BaseModel):
+    root: str = Field(max_length=4096)
+    excluded: list[str] = Field(default_factory=list, max_length=100)
+
+
+@router.get("/media-sync/folders")
+def browse_media_folders(path: str | None = None):
+    if path is None:
+        roots = os.listdrives() if os.name == "nt" else ["/"]
+        return {"path": None, "parent": None, "folders": [{"name": root, "path": root} for root in roots]}
+    directory = LocalPath(path)
+    if not directory.is_absolute():
+        raise HTTPException(status_code=422, detail="Укажите полный путь к папке.")
+    try:
+        directory = directory.resolve()
+        with os.scandir(directory) as entries:
+            folders = [
+                {"name": entry.name, "path": entry.path}
+                for entry in entries
+                if entry.is_dir(follow_symlinks=False) and not LocalPath(entry.path).is_junction()
+            ]
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=422, detail="Папка недоступна для просмотра.") from error
+    return {
+        "path": str(directory),
+        "parent": str(directory.parent) if directory.parent != directory else None,
+        "folders": sorted(folders, key=lambda entry: entry["name"].casefold()),
+    }
+
+
+@router.get("/media-sync/settings", response_model=MediaSyncSettings)
+def get_media_sync_settings(request: Request):
+    return read_media_sync_settings(request.app.state.movie_repository)
+
+
+@router.put("/media-sync/settings", response_model=MediaSyncSettings)
+def save_media_sync_settings(payload: MediaSyncSettings, request: Request):
+    root = payload.root.strip()
+    if root and not LocalPath(root).is_absolute():
+        raise HTTPException(status_code=422, detail="Укажите полный путь к папке на компьютере с CineLibrary.")
+    try:
+        excluded = []
+        if root:
+            resolved = LocalPath(root).resolve()
+            root = str(resolved)
+            excluded = [str((resolved / value.strip()).resolve()) for value in payload.excluded if value.strip()]
+            if any(LocalPath(path) == resolved or not LocalPath(path).is_relative_to(resolved) for path in excluded):
+                raise ValueError("Укажите исключения внутри папки медиатеки.")
+            if not resolved.is_dir() or any(not LocalPath(path).is_dir() for path in excluded):
+                raise ValueError("Выберите существующие папки.")
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if not sync_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Дождитесь завершения синхронизации.")
+    try:
+        with request.app.state.movie_repository.database.connect() as connection:
+            connection.execute(
+                "INSERT INTO media_sync_settings VALUES (1, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET root = excluded.root, excluded = excluded.excluded",
+                (root, json.dumps(excluded)),
+            )
+    finally:
+        sync_lock.release()
+    return {"root": root, "excluded": excluded}
+
+
+@router.post("/media-sync")
+def run_media_sync(request: Request):
+    if not sync_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Синхронизация уже запущена.")
+    try:
+        settings = get_media_sync_settings(request)
+        if not settings["root"]:
+            raise HTTPException(status_code=409, detail="Сначала укажите папку медиатеки в боковом меню.")
+        request.app.state.media_sync_scheduler.start()
+        movies = request.app.state.movie_repository
+
+        def create_importer() -> LibraryImportService:
+            tmdb = TMDBClient.from_environment()
+            return LibraryImportService(
+                librarian=MovieLibrarian(brain=ReplicateGeminiClient.from_environment(), tmdb=tmdb,
+                                         repository=movies, mode="library"),
+                movies=movies,
+                people_sync=PeopleSynchronizer(tmdb, request.app.state.people_repository),
+            )
+
+        return sync_media(movies, LocalPath(settings["root"]), tuple(map(LocalPath, settings["excluded"])), create_importer)
+    except (ReplicateConfigurationError, TMDBConfigurationError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    finally:
+        sync_lock.release()
 
 
 def build_movie_dna_service(request: Request) -> MovieDNAService:

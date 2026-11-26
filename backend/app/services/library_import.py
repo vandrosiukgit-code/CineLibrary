@@ -46,6 +46,8 @@ class LibraryImportService:
         movie_inputs: list[str],
         progress: Callable[[str], None],
         cancelled: Callable[[], bool],
+        *,
+        mark_existing_watched: bool = True,
     ) -> dict:
         if self.librarian is None:
             raise RuntimeError("Movie Librarian is required for text import")
@@ -67,9 +69,10 @@ class LibraryImportService:
                 )
                 status = "imported"
             elif result.status == "already_exists" and result.existing_movie_id:
-                movie = self.movies.update_user_data(
-                    result.existing_movie_id, {"watched": True}
-                )
+                if mark_existing_watched:
+                    movie = self.movies.update_user_data(result.existing_movie_id, {"watched": True})
+                else:
+                    movie = self.movies.get_movie(result.existing_movie_id)
                 status = "updated"
             else:
                 items.append(

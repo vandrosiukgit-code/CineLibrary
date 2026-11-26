@@ -14,6 +14,7 @@ from app.repositories.movies import MovieRepository
 from app.repositories.people import PeopleRepository
 from app.repositories.recommendation_sessions import RecommendationSessionStore
 from app.services.recommendation_jobs import RecommendationJobManager
+from app.services.media_sync import MediaSyncScheduler
 from app.services.telegram_delivery import TelegramDeliveryService
 from app.services.api_credentials import APICredentialsService
 
@@ -30,6 +31,7 @@ def create_app(
         if seed_path is not None:
             database.seed(seed_path)
         application.state.movie_repository = MovieRepository(database)
+        application.state.media_sync_scheduler = MediaSyncScheduler(application.state.movie_repository)
         application.state.people_repository = PeopleRepository(database)
         application.state.recommendation_sessions = RecommendationSessionStore()
         application.state.recommendation_jobs = RecommendationJobManager()
@@ -42,7 +44,10 @@ def create_app(
         application.state.telegram_delivery = TelegramDeliveryService(database)
         application.state.api_credentials = APICredentialsService(database)
         application.state.api_credentials.apply_saved_credentials()
-        yield
+        try:
+            yield
+        finally:
+            application.state.media_sync_scheduler.stop()
 
     application = FastAPI(
         title="CineLibrary",

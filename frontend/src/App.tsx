@@ -43,6 +43,11 @@ import {
   loadLibraryImport,
   startCandidateLibraryImport,
   startLibraryImport,
+  getMediaSyncSettings,
+  browseMediaFolders,
+  saveMediaSyncSettings,
+  runMediaSync,
+  type MediaFolders,
   type LibraryImportItem,
   type LibraryImportLog,
 } from './data/librarianApi'
@@ -133,6 +138,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [filter] = useState<LibraryFilter>('all')
   const [genre, setGenre] = useState('')
+  const [availability, setAvailability] = useState<AvailabilityStatus | ''>('')
   const [sort, setSort] = useState<LibrarySort>('release_desc')
   const [knownGenres, setKnownGenres] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -207,11 +213,89 @@ function App() {
     useState<RecommendationJobLog[]>([])
   const [isStoppingRecommendation, setIsStoppingRecommendation] = useState(false)
   const [recommendationError, setRecommendationError] = useState('')
+  const [isMediaSettingsOpen, setIsMediaSettingsOpen] = useState(false)
+  const [mediaRoot, setMediaRoot] = useState('')
+  const [mediaExclusions, setMediaExclusions] = useState<string[]>([])
+  const [mediaPicker, setMediaPicker] = useState<'root' | 'exclude' | null>(null)
+  const [mediaFolders, setMediaFolders] = useState<MediaFolders | null>(null)
+  const [isMediaSettingsBusy, setIsMediaSettingsBusy] = useState(false)
+  const [mediaSettingsMessage, setMediaSettingsMessage] = useState('')
+  const [isMediaSyncing, setIsMediaSyncing] = useState(false)
+  const [mediaSyncMessage, setMediaSyncMessage] = useState('')
+  const [mediaPending, setMediaPending] = useState<string[]>([])
   const movieCloseButtonRef = useRef<HTMLButtonElement>(null)
   const movieTriggerRef = useRef<HTMLElement | null>(null)
   const previewTimerRef = useRef<number | null>(null)
   const selectedMovieId = selectedMovie?.id
   const selectedMovieTmdbId = selectedMovie?.tmdbId ?? null
+
+  const openMediaSettings = async () => {
+    setIsMediaSettingsOpen(true)
+    setMediaSettingsMessage('')
+    setIsMediaSettingsBusy(true)
+    try {
+      const settings = await getMediaSyncSettings()
+      setMediaRoot(settings.root)
+      setMediaExclusions(settings.excluded)
+    } catch (error) {
+      setMediaSettingsMessage(error instanceof Error ? error.message : 'Настройки недоступны.')
+    } finally {
+      setIsMediaSettingsBusy(false)
+    }
+  }
+
+  const loadMediaFolders = async (path: string | null) => {
+    setIsMediaSettingsBusy(true)
+    setMediaSettingsMessage('')
+    try {
+      setMediaFolders(await browseMediaFolders(path))
+    } catch (error) {
+      setMediaSettingsMessage(error instanceof Error ? error.message : 'Папка недоступна.')
+    } finally {
+      setIsMediaSettingsBusy(false)
+    }
+  }
+
+  const openMediaPicker = (mode: 'root' | 'exclude') => {
+    setMediaPicker(mode)
+    setMediaFolders(null)
+    void loadMediaFolders(mode === 'exclude' ? mediaRoot : null)
+  }
+
+  const saveMediaSettings = async (root: string, excluded: string[]) => {
+    setIsMediaSettingsBusy(true)
+    try {
+      const settings = await saveMediaSyncSettings({ root, excluded })
+      setMediaRoot(settings.root)
+      setMediaExclusions(settings.excluded)
+      setMediaPicker(null)
+      setMediaSettingsMessage('Настройки сохранены.')
+    } catch (error) {
+      setMediaSettingsMessage(error instanceof Error ? error.message : 'Не удалось сохранить настройки.')
+    } finally {
+      setIsMediaSettingsBusy(false)
+    }
+  }
+
+  const syncMedia = async () => {
+    setIsMediaSyncing(true)
+    setMediaSyncMessage('Проверяем папку медиатеки…')
+    setMediaPending([])
+    try {
+      const result = await runMediaSync()
+      if (Object.keys(result.errors).length) {
+        setMediaSyncMessage(`Не удалось проверить папки: ${Object.keys(result.errors).join(', ')}.`)
+      } else {
+        setMediaSyncMessage(`Связано копий: ${result.matched}. Проверка наличия повторяется каждые 15 минут.`)
+        setMediaPending(result.pending)
+      }
+    } catch (error) {
+      setMediaSyncMessage(error instanceof Error ? error.message : 'Синхронизация не завершилась.')
+    } finally {
+      setCatalogRevision((revision) => revision + 1)
+      setIsMediaSyncing(false)
+    }
+  }
 
   const closeMovie = () => {
     setSelectedPerson(null)
@@ -324,7 +408,7 @@ function App() {
     const timer = window.setTimeout(() => {
       setIsLoading(true)
       setError('')
-      loadMovies(search, filter, { genre, sort }, controller.signal)
+      loadMovies(search, filter, { genre, sort, availability }, controller.signal)
         .then((loadedMovies) => {
           setMovies(loadedMovies)
           setKnownMovies((currentMovies) => {
@@ -356,7 +440,7 @@ function App() {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [search, filter, genre, sort, catalogRevision])
+  }, [search, filter, genre, sort, availability, catalogRevision])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1037,7 +1121,81 @@ function App() {
             <small>Replicate и TMDB</small>
           </span>
         </button>
+        <button type="button" className="nav-item chatbot-settings-link" aria-haspopup="dialog"
+          onClick={() => { setIsMenuOpen(false); void openMediaSettings() }}>
+          <span><strong>Медиатека</strong><small>Папка и исключения</small></span>
+        </button>
       </aside>
+
+      {isMediaSettingsOpen && (
+        <div className="settings-overlay" role="dialog" aria-modal="true" aria-labelledby="media-settings-title"
+          onClick={() => setIsMediaSettingsOpen(false)}>
+          <section className="settings-modal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="movie-modal-close" aria-label="Закрыть настройки медиатеки"
+              onClick={() => setIsMediaSettingsOpen(false)}>×</button>
+            <h2 id="media-settings-title">Настройки медиатеки</h2>
+            <div className="media-sync-settings">
+              <p>{mediaRoot || 'Папка медиатеки не подключена'}</p>
+              <button type="button" className="library-import-button" disabled={isMediaSettingsBusy} onClick={() => openMediaPicker('root')}>
+                {mediaRoot ? 'Сменить папку' : 'Подключить папку'}
+              </button>
+              {mediaRoot && (
+                <>
+                  <button type="button" disabled={isMediaSettingsBusy} onClick={() => void saveMediaSettings('', [])}>Отключить папку</button>
+                  <button type="button" disabled={isMediaSettingsBusy} onClick={() => openMediaPicker('exclude')}>Добавить исключение</button>
+                  {mediaExclusions.map((path) => (
+                    <div className="media-folder-exclusion" key={path}>
+                      <span>{path}</span>
+                      <button type="button" disabled={isMediaSettingsBusy} aria-label={`Вернуть папку в обход: ${path}`}
+                        onClick={() => void saveMediaSettings(mediaRoot, mediaExclusions.filter((item) => item !== path))}>Убрать исключение</button>
+                    </div>
+                  ))}
+                </>
+              )}
+              <span role="status">{mediaSettingsMessage}</span>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {mediaPicker && (
+        <dialog className="media-folder-picker" aria-labelledby="media-picker-title"
+          ref={(element) => { if (element && !element.open) element.showModal() }}
+          onCancel={(event) => { event.preventDefault(); if (!isMediaSettingsBusy) setMediaPicker(null) }}>
+          <h2 id="media-picker-title">{mediaPicker === 'exclude' ? 'Выберите папку для исключения' : 'Выберите папку медиатеки'}</h2>
+          <div className="media-folder-address">
+            <button type="button" aria-label="На уровень выше" title="На уровень выше"
+              disabled={isMediaSettingsBusy || !mediaFolders?.path || (mediaPicker === 'exclude' && mediaFolders.path === mediaRoot)}
+              onClick={() => void loadMediaFolders(mediaFolders?.parent ?? null)}>↑</button>
+            <p title={mediaFolders?.path ?? undefined}>{mediaFolders?.path ?? 'Этот компьютер'}</p>
+          </div>
+          <div className="media-folder-list" aria-label="Доступные папки" aria-busy={isMediaSettingsBusy}>
+            {mediaFolders?.folders.map((folder) => (
+              <button type="button" className="media-folder-row" key={folder.path} disabled={isMediaSettingsBusy}
+                onClick={() => void loadMediaFolders(folder.path)}>
+                <span className={mediaFolders.path ? 'media-folder-icon' : 'media-drive-icon'} aria-hidden="true" />
+                <span>{folder.name}</span>
+                <span className="media-folder-arrow" aria-hidden="true">›</span>
+              </button>
+            ))}
+            {mediaFolders?.folders.length === 0 && !isMediaSettingsBusy && <p>В этой папке нет подпапок.</p>}
+            {isMediaSettingsBusy && <p role="status">Открываем папку…</p>}
+            {mediaSettingsMessage && <p role="status">{mediaSettingsMessage}</p>}
+          </div>
+          <div className="configurator-actions">
+            <button type="button" className="configurator-secondary" disabled={isMediaSettingsBusy}
+              onClick={() => setMediaPicker(null)}>Отмена</button>
+            <button type="button" className="configurator-primary"
+              disabled={isMediaSettingsBusy || !mediaFolders?.path || (mediaPicker === 'exclude' && mediaFolders.path === mediaRoot)}
+              onClick={() => {
+                const path = mediaFolders?.path
+                if (!path) return
+                if (mediaPicker === 'root') void saveMediaSettings(path, path === mediaRoot ? mediaExclusions : [])
+                else void saveMediaSettings(mediaRoot, [...new Set([...mediaExclusions, path])])
+              }}>{mediaPicker === 'root' ? 'Выбрать папку' : 'Исключить папку'}</button>
+          </div>
+        </dialog>
+      )}
 
       <main className="main-content">
         <header className="topbar">
@@ -1068,6 +1226,9 @@ function App() {
             >
               Добавить просмотренные фильмы
             </button>
+            <button type="button" className="library-import-button" disabled={isMediaSyncing} onClick={() => void syncMedia()}>
+              {isMediaSyncing ? 'Синхронизация…' : 'Синхронизация медиатеки'}
+            </button>
             <button
               className="add-button"
               onClick={() => {
@@ -1085,6 +1246,13 @@ function App() {
               Подобрать фильмы
             </button>
           </div>
+          {mediaSyncMessage && <p className="media-sync-message" role="status">{mediaSyncMessage}</p>}
+          {mediaPending.length > 0 && (
+            <details className="media-sync-message">
+              <summary>Требуют проверки: {mediaPending.length}</summary>
+              <ul>{mediaPending.map((name, index) => <li key={`${name}-${index}`}>{name}</li>)}</ul>
+            </details>
+          )}
         </section>
 
         <section className="content-section">
@@ -1121,6 +1289,17 @@ function App() {
             </select>
 
             <select
+              value={availability}
+              onChange={(event) => setAvailability(event.target.value as AvailabilityStatus | '')}
+              aria-label="Наличие на диске"
+            >
+              <option value="">Наличие на диске: все</option>
+              {Object.entries(availabilityLabels).map(([value, label]) => (
+                <option value={value} key={value}>{label}</option>
+              ))}
+            </select>
+
+            <select
               value={sort}
               onChange={(event) => setSort(event.target.value as LibrarySort)}
               aria-label="Сортировка фильмов"
@@ -1145,7 +1324,7 @@ function App() {
           <div className="movie-grid">
             {movies.map((movie) => (
               <article
-                className="movie-card"
+                className={`movie-card status-${movie.availability}`}
                 key={movie.id}
               >
                 <button
@@ -1154,7 +1333,7 @@ function App() {
                   aria-label={`Подробнее о фильме ${movie.title}`}
                 >
                   <div
-                    className={`movie-poster status-${movie.availability}`}
+                    className="movie-poster"
                   >
                     <img
                       src={movie.poster ?? undefined}

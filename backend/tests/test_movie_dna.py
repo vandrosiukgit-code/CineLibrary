@@ -152,7 +152,10 @@ def test_recommendation_sends_original_and_cached_dna_to_gemini(movie_dna, monke
     response = client.post(
         "/api/agents/movie-recommender/recommend", json={
             "count": 1, "answers": [answer, genres],
-            "references": [{"tmdbId": ORIGINAL, "relation": "similar"}],
+            "references": [
+                {"tmdbId": ORIGINAL, "relation": "similar"},
+                {"tmdbId": 101, "relation": "avoid"},
+            ],
         },
     )
 
@@ -164,6 +167,10 @@ def test_recommendation_sends_original_and_cached_dna_to_gemini(movie_dna, monke
     assert "Current-request wishes and constraints take priority" in instructions
     assert payload["currentRequest"]["answers"] == [answer, genres]
     assert payload["referenceFeatures"] == {"1": "mood"}
+    assert payload["requestMovieDNA"] == {
+        "seek": [{"feature": "mood", "weight": 0.9}],
+        "avoid": [{"feature": "mood", "weight": 0.2}],
+    }
     assert response.json()["movies"][0]["suggestion"]["reason"] == reason
     assert response.json()["movies"][0]["suggestion"]["title"] == "Dune"
     assert "Сходство с ориентирами недоступно" in response.json()["movies"][0]["scoreExplanation"]
@@ -176,7 +183,8 @@ def test_recommendation_sends_original_and_cached_dna_to_gemini(movie_dna, monke
     signals = profile["movieDNASignals"]
     assert signals["ratedMoviesWithOriginal"] == signals["ratedMoviesWithEstimated"] == 1
     assert signals["associatedWithHigherRatings"][0] == {
-        "name": "mood", "score": 2.165, "highRatedMovies": 2, "lowRatedMovies": 0,
+        "name": "mood", "movies": 2, "averageRelevance": 0.722, "score": 0.541,
+        "weightedRelevance": 1.263, "highRatedMovies": 2, "lowRatedMovies": 0,
     }
     excluded = client.post("/api/agents/movie-recommender/recommend", json={
         "count": 1, "answers": [{**genres, "values": ["Исключить: приключения"]}],

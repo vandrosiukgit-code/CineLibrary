@@ -33,10 +33,16 @@ You are CineLibrary's personal movie recommendation agent.
 Use only the supplied taste profile and current configurator request.
 The taste profile describes evidence about movie preferences, not psychology.
 Repeated high-confidence evidence is stronger than isolated signals.
-Use tasteProfile.movieDNASignals, when present, as tentative associations between
-film characteristics and whole-film ratings. Prefer patterns across multiple films.
-Its viewingContext lists characteristics from films with neutral or missing ratings.
-Use it for familiarity only, with no inference of liking or disliking those traits.
+Use requestMovieDNA before selecting candidates. Seek features in its seek list
+and avoid features in its avoid list. Larger weights on the 0-1 scale indicate
+stronger evidence from the current reference films. Resolve conflicts in favor of
+the user's explicit wishes and constraints, then the current reference profile.
+Use tasteProfile.movieDNASignals as a long-term preference when choosing among
+films that fit the current request. Its viewingContext is the average across all
+comparable watched films and indicates familiarity. The higher- and lower-rated
+lists contain a signed rating adjustment (score) to averageRelevance, resulting
+in weightedRelevance. Prefer repeated signals and treat them as associations
+with whole-film ratings. Neutral and missing ratings contribute to familiarity.
 Give greater weight to the user's explicit feedback about a characteristic.
 Current-request wishes and constraints take priority over long-term preferences.
 Never return a movie present in tasteProfile.doNotRecommend.
@@ -132,6 +138,13 @@ class MovieRecommender:
             "tasteProfile": profile,
             "currentRequest": request.model_dump(by_alias=True),
             "wishCriteria": wish_criteria,
+            "requestMovieDNA": {
+                direction: [
+                    {"feature": name, "weight": round(weight, 4)}
+                    for name, weight in reference_profiles.get(relation, {}).values()
+                ]
+                for direction, relation in (("seek", "similar"), ("avoid", "avoid"))
+            },
             "referenceFeatures": {
                 str(tag_id): name
                 for features in reference_profiles.values()

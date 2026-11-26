@@ -5,7 +5,7 @@ import type {
   MovieUserDataUpdate,
 } from './movieCatalog'
 
-const API_URL = 'http://127.0.0.1:8000/api/movies'
+const API_URL = '/api/movies'
 
 export type LibraryFilter =
   | 'all'
@@ -24,6 +24,7 @@ export type LibrarySort =
 export interface LibraryOptions {
   genre: string
   sort: LibrarySort
+  availability?: AvailabilityStatus | ''
 }
 
 export interface MovieView {
@@ -158,7 +159,7 @@ export async function findTelegramChats(botToken?: string): Promise<TelegramChat
 }
 
 export async function loadAPICredentials(): Promise<APICredentialsSettings> {
-  const response = await fetch('http://127.0.0.1:8000/api/settings/api-credentials')
+  const response = await fetch('/api/settings/api-credentials')
   if (!response.ok) throw await readApiError(response, 'Не удалось загрузить API-ключи')
   return (await response.json()) as APICredentialsSettings
 }
@@ -167,7 +168,7 @@ export async function saveAPICredentials(input: {
   replicateApiToken?: string
   tmdbReadAccessToken?: string
 }): Promise<APICredentialsSettings> {
-  const response = await fetch('http://127.0.0.1:8000/api/settings/api-credentials', {
+  const response = await fetch('/api/settings/api-credentials', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -261,6 +262,7 @@ export async function loadMovies(
   if (filter === 'unrated') parameters.set('hasPersonalRating', 'false')
   if (filter === 'untagged') parameters.set('hasTasteTags', 'false')
   if (options.genre) parameters.set('genre', options.genre)
+  if (options.availability) parameters.set('availability', options.availability)
   parameters.set('sort', options.sort)
 
   const query = parameters.size > 0 ? `?${parameters}` : ''

@@ -71,6 +71,17 @@ def test_filters_can_be_combined(client):
     }
 
 
+def test_availability_filter_uses_same_status_as_catalog_card(client):
+    with client.app.state.movie_repository.database.connect() as connection:
+        connection.execute("INSERT INTO movie_files (movie_id, status) VALUES (3, 'available')")
+        connection.execute("DELETE FROM movie_files WHERE movie_id = 4")
+
+    for status in ("available", "downloading", "missing"):
+        response = client.get("/api/movies", params={"availability": status, "inWishlist": "true"})
+        assert response.status_code == 200
+        assert [movie["id"] for movie in response.json()] == {"available": [3], "downloading": [], "missing": [4]}[status]
+
+
 def test_genre_filter_options_come_from_watched_catalog(client):
     response = client.get("/api/movies/genres", params={"watched": "true"})
 

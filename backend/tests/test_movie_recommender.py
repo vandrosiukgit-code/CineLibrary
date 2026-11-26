@@ -117,13 +117,41 @@ def test_movie_dna_signals_combine_original_and_estimated_tags_with_ratings():
         "ratedMoviesWithOriginal": 2,
         "ratedMoviesWithEstimated": 1,
         "associatedWithHigherRatings": [
-            {"name": "slow paced", "score": 1.2, "highRatedMovies": 2, "lowRatedMovies": 1},
+            {"name": "slow paced", "movies": 5, "averageRelevance": 0.8, "score": 0.12,
+             "weightedRelevance": 0.92, "highRatedMovies": 2, "lowRatedMovies": 1},
         ],
         "associatedWithLowerRatings": [
-            {"name": "bleak", "score": -0.9, "highRatedMovies": 0, "lowRatedMovies": 1},
+            {"name": "bleak", "movies": 2, "averageRelevance": 0.9, "score": -0.225,
+             "weightedRelevance": 0.675, "highRatedMovies": 0, "lowRatedMovies": 1},
         ],
-        "viewingContext": [{"name": "slow paced", "movies": 2}, {"name": "bleak", "movies": 1}],
+        "viewingContext": [
+            {"name": "bleak", "movies": 2, "averageRelevance": 0.9},
+            {"name": "slow paced", "movies": 5, "averageRelevance": 0.8},
+        ],
     }
+
+
+def test_same_watched_trait_is_lowered_by_low_ratings_and_raised_by_high_ratings():
+    movie = FakeMovieRepository().list_movies()[0]
+    repository = Mock(spec=FakeMovieRepository)
+    repository.list_movies.return_value = [movie]
+    repository.list_taste_tags.return_value = []
+    dna = Mock()
+    dna.get.return_value = {"status": "found", "source": "original", "tags": [
+        {"tag_id": 1, "name": "pace", "relevance": 0.6},
+    ]}
+    builder = TasteProfileBuilder(repository, movie_dna=dna)
+
+    weights = []
+    for rating in [1, 2, 3, 4, 5, None]:
+        movie["user_data"]["personal_rating"] = rating
+        signals = builder.build()["movieDNASignals"]
+        baseline = signals["viewingContext"][0]["averageRelevance"]
+        assert baseline == 0.6
+        adjustments = signals["associatedWithHigherRatings"] + signals["associatedWithLowerRatings"]
+        weights.append(adjustments[0]["weightedRelevance"] if adjustments else baseline)
+
+    assert weights == [0.0, 0.3, 0.6, 0.9, 1.2, 0.6]
 
 
 def test_taste_profile_preserves_existing_signals_without_movie_dna():
@@ -304,6 +332,9 @@ def test_recommender_reranks_with_average_reference_dna_and_explains_real_matche
     assert "Сходство с ориентирами — 25 из 100" in response.movies[1].score_explanation
     brain.generate_json.assert_called_once()
     assert brain.generate_json.call_args.args[1]["referenceFeatures"] == {"11": "dry humor"}
+    assert brain.generate_json.call_args.args[1]["requestMovieDNA"] == {
+        "seek": [{"feature": "dry humor", "weight": 0.8}], "avoid": [],
+    }
     dna.estimate.assert_not_called()
 
 

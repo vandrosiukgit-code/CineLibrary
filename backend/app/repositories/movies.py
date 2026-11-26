@@ -7,6 +7,15 @@ from app.database import MovieDatabase
 from app.schemas.movies import MovieDraftImportRequest
 
 
+MOVIE_AVAILABILITY_SQL = """(
+    SELECT CASE
+        WHEN SUM(mf.status = 'available') > 0 THEN 'available'
+        WHEN SUM(mf.status = 'downloading') > 0 THEN 'downloading'
+        ELSE 'missing'
+    END FROM movie_files mf WHERE mf.movie_id = m.id
+)"""
+
+
 class MovieAlreadyExistsError(RuntimeError):
     pass
 
@@ -54,10 +63,7 @@ class MovieRepository:
             clauses.append("ud.in_wishlist = ?")
             parameters.append(int(in_wishlist))
         if availability:
-            clauses.append(
-                "EXISTS (SELECT 1 FROM movie_files mf "
-                "WHERE mf.movie_id = m.id AND mf.status = ?)"
-            )
+            clauses.append(f"{MOVIE_AVAILABILITY_SQL} = ?")
             parameters.append(availability)
         if genre:
             clauses.append(
@@ -461,16 +467,9 @@ class MovieRepository:
         self, connection: sqlite3.Connection, movie_id: int
     ) -> dict[str, Any] | None:
         movie = connection.execute(
-            """
+            f"""
             SELECT m.*, ud.watched, ud.personal_rating, ud.comment, ud.in_wishlist,
-                   COALESCE(
-                       (SELECT CASE
-                           WHEN SUM(mf.status = 'available') > 0 THEN 'available'
-                           WHEN SUM(mf.status = 'downloading') > 0 THEN 'downloading'
-                           ELSE 'missing'
-                       END FROM movie_files mf WHERE mf.movie_id = m.id),
-                       'missing'
-                   ) AS availability
+                   {MOVIE_AVAILABILITY_SQL} AS availability
             FROM movies m
             JOIN movie_user_data ud ON ud.movie_id = m.id
             WHERE m.id = ?

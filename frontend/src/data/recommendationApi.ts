@@ -1,4 +1,4 @@
-const API_URL = 'http://127.0.0.1:8000/api/agents/movie-recommender'
+const API_URL = '/api/agents/movie-recommender'
 
 export interface ConfiguratorAnswer {
   cardId: string

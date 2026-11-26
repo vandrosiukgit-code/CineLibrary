@@ -12,21 +12,41 @@ Personal Cinematic Knowledge Management System.
 cd D:\КИНО\CineLibrary
 .\.venv\Scripts\Activate.ps1
 cd backend
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Во втором окне запустите frontend:
 
 ```powershell
 cd D:\КИНО\CineLibrary\frontend
-npm run dev
+npm run dev -- --host localhost --port 5173 --strictPort
 ```
 
-Откройте приложение: http://localhost:5173
-
-Документация API: http://127.0.0.1:8000/docs
+| Что открыть | Адрес |
+|---|---|
+| Приложение на компьютере | [localhost:5173](http://localhost:5173/) |
+| Приложение на телефоне по домашней сети | [192.168.110.205:4173](http://192.168.110.205:4173/) |
+| Замер окна Chrome на телефоне | [192.168.110.205:4173/viewport.html](http://192.168.110.205:4173/viewport.html) |
+| Проверка backend | [127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health) |
+| Документация API | [127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) |
 
 Для остановки сервера нажмите `Ctrl+C` в соответствующем окне.
+
+Если при запуске backend появляется `WinError 10013`, проверьте `/api/health`. Ответ `{"status":"healthy"}` означает, что backend уже работает на порту `8000`. Используйте запущенный экземпляр или остановите его перед повторным запуском.
+
+## Доступ с телефона по домашней сети
+
+Запустите backend по инструкции выше. В отдельном окне PowerShell выполните:
+
+```powershell
+cd D:\КИНО\CineLibrary\frontend
+npm run build
+npm run preview -- --host 192.168.110.205 --port 4173 --strictPort
+```
+
+Подключите телефон к той же домашней сети и откройте адрес на порту `4173` из таблицы. Если IP компьютера изменился, возьмите новый IPv4 из `ipconfig` и подставьте его в команду и в адрес на телефоне. Предпросмотр передаёт запросы `/api` локальному backend на порт `8000`.
+
+На странице замеров в каждой ориентации сначала снимите замер без клавиатуры, затем нажмите отложенный замер и держите клавиатуру открытой до сохранения результата.
 
 ## Project location
 
@@ -123,7 +143,7 @@ Install dependencies and start Vite:
     npm install
     npm run dev
 
-The frontend loads movies from `http://127.0.0.1:8000`, supports title search,
+The frontend loads movies through `/api`, proxied to `http://127.0.0.1:8000` by Vite, and supports title search,
 library filters, and editing watched, wishlist and personal rating fields.
 
 ## Movie Librarian 1
