@@ -14,7 +14,6 @@ from app.clients.tmdb import TMDBAPIError, TMDBClient, TMDBConfigurationError
 from app.repositories.recommendation_sessions import (
     RecommendationSessionNotFoundError,
 )
-from app.services.recommendation_jobs import RecommendationJobNotFoundError
 from app.schemas.recommendations import (
     PromoteRecommendationRequest,
     PromoteRecommendationResponse,
@@ -24,6 +23,8 @@ from app.schemas.recommendations import (
     RecommendationResponse,
     RecommendationJobRead,
 )
+from app.services.movie_dna import MovieDNAService
+from app.services.recommendation_jobs import RecommendationJobNotFoundError
 from app.services.recommendation_promotion import (
     RecommendationPromotionError,
     RecommendationPromotionService,
@@ -33,7 +34,7 @@ from app.services.telegram_delivery import (
     TelegramConfigurationError,
     TelegramDeliveryError,
 )
-from app.services.movie_download import MovieDownloadService
+from app.services.movie_download import MovieDownloadService, PartialMovieDownloadError
 
 
 router = APIRouter(prefix="/api/agents/movie-recommender", tags=["agents"])
@@ -60,10 +61,12 @@ def build_recommender(
 ) -> MovieRecommender:
     brain = ReplicateGeminiClient.from_environment()
     tmdb = TMDBClient.from_environment()
+    movies = request.app.state.movie_repository
+    movie_dna = MovieDNAService.from_database(movies.database)
     librarian = MovieLibrarian(
         brain=brain,
         tmdb=tmdb,
-        repository=request.app.state.movie_repository,
+        repository=movies,
         mode="recommendation",
         cancelled=cancelled,
     )
@@ -71,9 +74,11 @@ def build_recommender(
         brain=brain,
         tmdb=tmdb,
         librarian=librarian,
-        profile_builder=TasteProfileBuilder(request.app.state.movie_repository),
+        profile_builder=TasteProfileBuilder(movies, movie_dna=movie_dna),
         people_repository=request.app.state.people_repository,
         sessions=request.app.state.recommendation_sessions,
+        movie_dna=movie_dna,
+        movies=movies,
     )
 
 
@@ -180,6 +185,10 @@ def promote_recommendations(
         raise HTTPException(status_code=404, detail="Recommendation not found") from error
     except (TMDBConfigurationError, TelegramConfigurationError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    except PartialMovieDownloadError as error:
+        raise HTTPException(status_code=502, detail={
+            "message": str(error), "deliveredTmdbIds": error.delivered_tmdb_ids,
+        }) from error
     except TelegramDeliveryError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except (RecommendationPromotionError, TMDBAPIError) as error:

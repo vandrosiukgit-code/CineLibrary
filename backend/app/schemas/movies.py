@@ -88,6 +88,7 @@ class TMDBDownloadRequestCreate(BaseModel):
     tmdb_movie_ids: list[int] = Field(
         alias="tmdbMovieIds", min_length=1, max_length=20
     )
+    prefer_posters: bool = Field(default=False, alias="preferPosters")
 
 
 class TelegramSettingsUpdate(BaseModel):
@@ -103,6 +104,19 @@ class TelegramSettingsRead(BaseModel):
     configured: bool
     chat_id: str | None = Field(serialization_alias="chatId")
     updated_at: str | None = Field(serialization_alias="updatedAt")
+
+
+class TelegramChatDiscoveryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    bot_token: str | None = Field(default=None, alias="botToken", min_length=1)
+
+
+class TelegramChatRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    chat_id: str = Field(serialization_alias="chatId")
+    label: str
 
 
 class TelegramTestRead(BaseModel):

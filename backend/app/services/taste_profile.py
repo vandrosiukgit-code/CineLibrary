@@ -5,13 +5,17 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.repositories.movies import MovieRepository
+from app.services.movie_dna import MovieDNAService
 
 
 class TasteProfileBuilder:
     """Builds an evidence-first profile that can be read directly by an LLM."""
 
-    def __init__(self, repository: MovieRepository) -> None:
+    def __init__(
+        self, repository: MovieRepository, *, movie_dna: MovieDNAService | None = None
+    ) -> None:
         self.repository = repository
+        self.movie_dna = movie_dna
 
     def build(self) -> dict[str, Any]:
         movies = self.repository.list_movies(watched=True, sort="release_desc")
@@ -106,7 +110,7 @@ class TasteProfileBuilder:
             )
         )
 
-        return {
+        profile = {
             "format": "cinelibrary.taste-profile.v1",
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "interpretationRules": [
@@ -129,6 +133,85 @@ class TasteProfileBuilder:
             "tagSignals": signals,
             "movieEvidence": evidence,
             "doNotRecommend": do_not_recommend,
+        }
+        dna_signals = self._movie_dna_signals(movies)
+        if dna_signals is not None:
+            profile["movieDNASignals"] = dna_signals
+        return profile
+
+    def _movie_dna_signals(
+        self, movies: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        if self.movie_dna is None:
+            return None
+
+        tag_signals: dict[int, dict[str, Any]] = {}
+        viewing_context: dict[int, dict[str, Any]] = {}
+        source_counts = {"original": 0, "estimated": 0}
+        for movie in movies:
+            rating = movie["user_data"]["personal_rating"]
+            tmdb_id = movie.get("tmdb_id")
+            if tmdb_id is None or tmdb_id <= 0:
+                continue
+            genome = self.movie_dna.get(tmdb_id)
+            source = genome.get("source")
+            if genome["status"] != "found" or source not in source_counts:
+                continue
+            strongest_tags = sorted(
+                genome["tags"], key=lambda tag: (-tag["relevance"], tag["tag_id"])
+            )[:12]
+            source_weight = 0.5 if source == "estimated" else 1.0
+            # Three stars and absent ratings contribute only to viewing context.
+            weight = (rating - 3) * source_weight if rating is not None else 0.0
+            if weight:
+                source_counts[source] += 1
+            count_key = "highRatedMovies" if weight > 0 else "lowRatedMovies"
+            for tag in strongest_tags:
+                relevance = tag["relevance"]
+                if relevance <= 0:
+                    continue
+                if not weight:
+                    context = viewing_context.setdefault(
+                        tag["tag_id"], {"name": tag["name"], "score": 0.0, "movies": 0}
+                    )
+                    context["score"] += source_weight * relevance
+                    context["movies"] += 1
+                    continue
+                signal = tag_signals.setdefault(
+                    tag["tag_id"],
+                    {
+                        "name": tag["name"],
+                        "score": 0.0,
+                        "highRatedMovies": 0,
+                        "lowRatedMovies": 0,
+                    },
+                )
+                signal["score"] += weight * relevance
+                signal[count_key] += 1
+
+        if not tag_signals and not viewing_context:
+            return None
+        ranked = sorted(
+            tag_signals.values(),
+            key=lambda signal: (-abs(signal["score"]), signal["name"]),
+        )
+        higher, lower = [], []
+        for signal in ranked:
+            score = round(signal["score"], 3)
+            if score:
+                (higher if score > 0 else lower).append({**signal, "score": score})
+        frequent_context = sorted(
+            viewing_context.values(),
+            key=lambda tag: (-tag["score"], tag["name"]),
+        )[:8]
+        return {
+            "ratedMoviesWithOriginal": source_counts["original"],
+            "ratedMoviesWithEstimated": source_counts["estimated"],
+            "associatedWithHigherRatings": higher[:8],
+            "associatedWithLowerRatings": lower[:8],
+            "viewingContext": [
+                {"name": tag["name"], "movies": tag["movies"]} for tag in frequent_context
+            ],
         }
 
     @staticmethod

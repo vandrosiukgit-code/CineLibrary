@@ -1,9 +1,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import { RecommendationResults } from './components/RecommendationResults'
 import {
   loadDownloadRequests,
   loadAPICredentials,
+  findTelegramChats,
   loadGenres,
   loadTasteTags,
   loadTelegramSettings,
@@ -17,6 +19,7 @@ import {
   type LibrarySort,
   type MovieView,
   type TasteTagDefinition,
+  type TelegramChat,
 } from './data/movieApi'
 import type {
   AvailabilityStatus,
@@ -31,11 +34,18 @@ import {
 import {
   cancelRecommendationJob,
   loadRecommendationJob,
-  promoteRecommendations,
   startRecommendationJob,
   type RecommendationJobLog,
   type RecommendationResponse,
 } from './data/recommendationApi'
+import {
+  cancelLibraryImport,
+  loadLibraryImport,
+  startCandidateLibraryImport,
+  startLibraryImport,
+  type LibraryImportItem,
+  type LibraryImportLog,
+} from './data/librarianApi'
 import {
   CineLibraryWordmark,
   getTypographyVariant,
@@ -55,7 +65,9 @@ interface FilmographyPreview {
   availability: AvailabilityStatus
   tmdbMovieId: number
   localMovieId: number | null
-  top: number
+  top: number | undefined
+  bottom: number | undefined
+  maxHeight: number
   left: number
   width: number
 }
@@ -114,6 +126,8 @@ function App() {
   const [telegramChatId, setTelegramChatId] = useState('')
   const [telegramSettingsStatus, setTelegramSettingsStatus] = useState('')
   const [isSavingTelegramSettings, setIsSavingTelegramSettings] = useState(false)
+  const [telegramChats, setTelegramChats] = useState<TelegramChat[]>([])
+  const [isFindingTelegramChats, setIsFindingTelegramChats] = useState(false)
   const [movies, setMovies] = useState<MovieView[]>([])
   const [knownMovies, setKnownMovies] = useState<MovieView[]>([])
   const [search, setSearch] = useState('')
@@ -139,11 +153,27 @@ function App() {
     new Set(),
   )
   const [requestingMovieId, setRequestingMovieId] = useState<number | null>(null)
+  const [failedDownloadMovieId, setFailedDownloadMovieId] = useState<number | null>(null)
   const [enlargedImage, setEnlargedImage] = useState<{
     src: string
     alt: string
   } | null>(null)
   const [isRecommendationOpen, setIsRecommendationOpen] = useState(false)
+  const [isLibraryImportOpen, setIsLibraryImportOpen] = useState(false)
+  const [libraryImportText, setLibraryImportText] = useState('')
+  const [libraryImportJobId, setLibraryImportJobId] = useState<string | null>(null)
+  const [libraryImportLogs, setLibraryImportLogs] = useState<LibraryImportLog[]>([])
+  const [libraryImportItems, setLibraryImportItems] = useState<LibraryImportItem[]>([])
+  const [selectedImportCandidateIds, setSelectedImportCandidateIds] = useState<Set<number>>(
+    new Set(),
+  )
+  const [activeCandidateImportIds, setActiveCandidateImportIds] = useState<Set<number>>(
+    new Set(),
+  )
+  const [libraryImportError, setLibraryImportError] = useState('')
+  const [isLibraryImportRunning, setIsLibraryImportRunning] = useState(false)
+  const [isStoppingLibraryImport, setIsStoppingLibraryImport] = useState(false)
+  const [catalogRevision, setCatalogRevision] = useState(0)
   const [configuratorStep, setConfiguratorStep] = useState(0)
   const [configuratorWish, setConfiguratorWish] = useState('')
   const [referenceSelections, setReferenceSelections] =
@@ -177,16 +207,11 @@ function App() {
     useState<RecommendationJobLog[]>([])
   const [isStoppingRecommendation, setIsStoppingRecommendation] = useState(false)
   const [recommendationError, setRecommendationError] = useState('')
-  const [selectedRecommendationIds, setSelectedRecommendationIds] =
-    useState<Set<string>>(new Set())
-  const [isPromotingRecommendations, setIsPromotingRecommendations] =
-    useState(false)
-  const [promotedRecommendationIds, setPromotedRecommendationIds] =
-    useState<Set<string>>(new Set())
   const movieCloseButtonRef = useRef<HTMLButtonElement>(null)
   const movieTriggerRef = useRef<HTMLElement | null>(null)
-  const previewCloseTimerRef = useRef<number | null>(null)
+  const previewTimerRef = useRef<number | null>(null)
   const selectedMovieId = selectedMovie?.id
+  const selectedMovieTmdbId = selectedMovie?.tmdbId ?? null
 
   const closeMovie = () => {
     setSelectedPerson(null)
@@ -204,9 +229,9 @@ function App() {
   }
 
   const closePerson = () => {
-    if (previewCloseTimerRef.current !== null) {
-      window.clearTimeout(previewCloseTimerRef.current)
-      previewCloseTimerRef.current = null
+    if (previewTimerRef.current !== null) {
+      window.clearTimeout(previewTimerRef.current)
+      previewTimerRef.current = null
     }
     setFilmographyPreview(null)
     setSelectedPerson(null)
@@ -232,24 +257,16 @@ function App() {
     credit: PersonFilmographyItem,
     localMovie: MovieView | null,
   ) => {
-    if (previewCloseTimerRef.current !== null) {
-      window.clearTimeout(previewCloseTimerRef.current)
-      previewCloseTimerRef.current = null
-    }
+    keepFilmographyPreviewOpen()
     const bounds = element.getBoundingClientRect()
     const width = Math.min(728, window.innerWidth - 32)
-    const estimatedHeight = 312
     const left = Math.min(
       Math.max(16, bounds.left),
       window.innerWidth - width - 16,
     )
-    const top =
-      bounds.top >= estimatedHeight + 26
-        ? bounds.top - estimatedHeight - 10
-        : Math.min(
-            bounds.bottom + 10,
-            window.innerHeight - estimatedHeight - 16,
-          )
+    const spaceAbove = bounds.top - 16
+    const spaceBelow = window.innerHeight - bounds.bottom - 16
+    const showAbove = spaceAbove >= 312 || spaceAbove >= spaceBelow
     setFilmographyPreview({
       title: localMovie?.title ?? credit.title,
       originalTitle: localMovie?.originalTitle ?? credit.originalTitle,
@@ -264,23 +281,41 @@ function App() {
       availability: localMovie?.availability ?? 'missing',
       tmdbMovieId: credit.tmdbMovieId,
       localMovieId: localMovie?.id ?? null,
-      top,
+      top: showAbove ? undefined : bounds.bottom,
+      bottom: showAbove ? window.innerHeight - bounds.top : undefined,
+      maxHeight: showAbove ? spaceAbove : spaceBelow,
       left,
       width,
     })
   }
 
+  const hoverFilmographyItem = (
+    element: HTMLElement,
+    credit: PersonFilmographyItem,
+    localMovie: MovieView | null,
+  ) => {
+    keepFilmographyPreviewOpen()
+    if (!filmographyPreview) {
+      showFilmographyPreview(element, credit, localMovie)
+    } else if (filmographyPreview.tmdbMovieId !== credit.tmdbMovieId) {
+      previewTimerRef.current = window.setTimeout(() => {
+        showFilmographyPreview(element, credit, localMovie)
+      }, 240)
+    }
+  }
+
   const scheduleFilmographyPreviewClose = () => {
-    previewCloseTimerRef.current = window.setTimeout(() => {
+    keepFilmographyPreviewOpen()
+    previewTimerRef.current = window.setTimeout(() => {
       setFilmographyPreview(null)
-      previewCloseTimerRef.current = null
-    }, 180)
+      previewTimerRef.current = null
+    }, 240)
   }
 
   const keepFilmographyPreviewOpen = () => {
-    if (previewCloseTimerRef.current !== null) {
-      window.clearTimeout(previewCloseTimerRef.current)
-      previewCloseTimerRef.current = null
+    if (previewTimerRef.current !== null) {
+      window.clearTimeout(previewTimerRef.current)
+      previewTimerRef.current = null
     }
   }
 
@@ -321,7 +356,7 @@ function App() {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [search, filter, genre, sort])
+  }, [search, filter, genre, sort, catalogRevision])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -337,7 +372,7 @@ function App() {
         }
       })
     return () => controller.abort()
-  }, [])
+  }, [catalogRevision])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -380,7 +415,6 @@ function App() {
         setRecommendationLogs(job.logs)
         if (job.status === 'completed' && job.result) {
           setRecommendationResult(job.result)
-          setPromotedRecommendationIds(new Set())
           setIsRecommending(false)
           setIsStoppingRecommendation(false)
           setRecommendationJobId(null)
@@ -417,14 +451,59 @@ function App() {
   }, [recommendationJobId])
 
   useEffect(() => {
-    document.body.style.overflow = selectedMovie || isRecommendationOpen
+    if (!libraryImportJobId) return
+    let isActive = true
+
+    const poll = async () => {
+      try {
+        const job = await loadLibraryImport(libraryImportJobId)
+        if (!isActive) return
+        setLibraryImportLogs(job.logs)
+        if (job.status === 'completed') {
+          setLibraryImportItems((currentItems) => [
+            ...currentItems.filter((item) => !item.candidates.some(
+              (candidate) => activeCandidateImportIds.has(candidate.tmdbId),
+            )),
+            ...(job.result?.items ?? []),
+          ])
+          setActiveCandidateImportIds(new Set())
+          setIsLibraryImportRunning(false)
+          setLibraryImportJobId(null)
+          setCatalogRevision((revision) => revision + 1)
+          return
+        }
+        if (job.status === 'failed' || job.status === 'cancelled') {
+          setLibraryImportError(
+            job.error || (job.status === 'cancelled' ? 'Добавление остановлено.' : 'Не удалось добавить фильмы.'),
+          )
+          setIsLibraryImportRunning(false)
+          setIsStoppingLibraryImport(false)
+          setLibraryImportJobId(null)
+          return
+        }
+        window.setTimeout(poll, 1000)
+      } catch (requestError) {
+        if (!isActive) return
+        setLibraryImportError(
+          requestError instanceof Error ? requestError.message : 'Не удалось получить состояние импорта',
+        )
+        setIsLibraryImportRunning(false)
+        setLibraryImportJobId(null)
+      }
+    }
+    void poll()
+    return () => { isActive = false }
+  }, [libraryImportJobId, activeCandidateImportIds])
+
+  useEffect(() => {
+    document.body.style.overflow = selectedMovie || isRecommendationOpen || isLibraryImportOpen
       ? 'hidden'
       : ''
 
     return () => {
       document.body.style.overflow = ''
     }
-  }, [selectedMovie, isRecommendationOpen])
+  }, [selectedMovie, isRecommendationOpen, isLibraryImportOpen])
 
   useEffect(() => {
     if (selectedMovieId === undefined) return
@@ -473,6 +552,8 @@ function App() {
           closeMovie()
         } else if (isRecommendationOpen) {
           setIsRecommendationOpen(false)
+        } else if (isLibraryImportOpen) {
+          setIsLibraryImportOpen(false)
         }
       }
     }
@@ -488,6 +569,7 @@ function App() {
     isMovieEditing,
     enlargedImage,
     isRecommendationOpen,
+    isLibraryImportOpen,
   ])
 
   const director = selectedMovie?.director ?? null
@@ -619,8 +701,6 @@ function App() {
     setRecommendationError('')
     setConfiguratorNotice('')
     setRecommendationLogs([])
-    setSelectedRecommendationIds(new Set())
-    setPromotedRecommendationIds(new Set())
     try {
       const answers = configuratorCards.map((card, index) => {
         const values = getConfiguratorValues(index)
@@ -631,7 +711,11 @@ function App() {
           skipped: values.length === 0,
         }
       })
-      const job = await startRecommendationJob(answers, recommendationCount)
+      const references = referenceSelections.flatMap((selection) => {
+        const movie = knownMovies.find((item) => String(item.id) === selection.id)
+        return movie?.tmdbId ? [{ tmdbId: movie.tmdbId, relation: selection.relation }] : []
+      })
+      const job = await startRecommendationJob(answers, recommendationCount, references)
       setRecommendationJobId(job.jobId)
       setRecommendationLogs(job.logs)
     } catch (requestError) {
@@ -641,6 +725,59 @@ function App() {
           : 'Не удалось подобрать фильмы',
       )
       setIsRecommending(false)
+    }
+  }
+
+  const submitLibraryImport = async () => {
+    if (!libraryImportText.trim() || isLibraryImportRunning) return
+    setLibraryImportError('')
+    setLibraryImportItems([])
+    setSelectedImportCandidateIds(new Set())
+    setLibraryImportLogs([])
+    setIsLibraryImportRunning(true)
+    setIsStoppingLibraryImport(false)
+    try {
+      const job = await startLibraryImport(libraryImportText.trim())
+      setLibraryImportJobId(job.jobId)
+      setLibraryImportLogs(job.logs)
+    } catch (requestError) {
+      setLibraryImportError(
+        requestError instanceof Error ? requestError.message : 'Не удалось запустить добавление фильмов',
+      )
+      setIsLibraryImportRunning(false)
+    }
+  }
+
+  const submitSelectedImportCandidates = async () => {
+    if (selectedImportCandidateIds.size === 0 || isLibraryImportRunning) return
+    setLibraryImportError('')
+    setIsLibraryImportRunning(true)
+    setIsStoppingLibraryImport(false)
+    try {
+      const job = await startCandidateLibraryImport(Array.from(selectedImportCandidateIds))
+      setActiveCandidateImportIds(new Set(selectedImportCandidateIds))
+      setLibraryImportJobId(job.jobId)
+      setLibraryImportLogs(job.logs)
+      setSelectedImportCandidateIds(new Set())
+    } catch (requestError) {
+      setLibraryImportError(
+        requestError instanceof Error ? requestError.message : 'Не удалось добавить выбранные фильмы',
+      )
+      setIsLibraryImportRunning(false)
+    }
+  }
+
+  const stopLibraryImport = async () => {
+    if (!libraryImportJobId || isStoppingLibraryImport) return
+    setIsStoppingLibraryImport(true)
+    try {
+      const job = await cancelLibraryImport(libraryImportJobId)
+      setLibraryImportLogs(job.logs)
+    } catch (requestError) {
+      setLibraryImportError(
+        requestError instanceof Error ? requestError.message : 'Не удалось остановить добавление',
+      )
+      setIsStoppingLibraryImport(false)
     }
   }
 
@@ -657,26 +794,6 @@ function App() {
           : 'Не удалось остановить подбор',
       )
       setIsStoppingRecommendation(false)
-    }
-  }
-
-  const requestRecommendedMovies = async () => {
-    if (!recommendationResult || selectedRecommendationIds.size === 0) return
-    setIsPromotingRecommendations(true)
-    setRecommendationError('')
-    try {
-      const ids = Array.from(selectedRecommendationIds)
-      await promoteRecommendations(recommendationResult.sessionId, ids)
-      setPromotedRecommendationIds((currentIds) => new Set([...currentIds, ...ids]))
-      setSelectedRecommendationIds(new Set())
-    } catch (requestError) {
-      setRecommendationError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'Не удалось отправить фильм на загрузку',
-      )
-    } finally {
-      setIsPromotingRecommendations(false)
     }
   }
 
@@ -744,24 +861,21 @@ function App() {
     if (saved) cancelMovieEditing()
   }
 
-  const submitDownloadRequest = async (preview: FilmographyPreview) => {
-    if (
-      requestedMovieIds.has(preview.tmdbMovieId) ||
-      requestingMovieId === preview.tmdbMovieId
-    ) {
+  const submitDownloadRequest = async (tmdbMovieId: number) => {
+    if (requestingMovieId !== null) {
       return
     }
-    setRequestingMovieId(preview.tmdbMovieId)
+    setRequestingMovieId(tmdbMovieId)
+    setFailedDownloadMovieId(null)
     try {
-      const [result] = await requestMoviesByTmdb([preview.tmdbMovieId])
+      const [result] = await requestMoviesByTmdb([tmdbMovieId])
       setRequestedMovieIds((currentIds) => {
         const nextIds = new Set(currentIds)
         nextIds.add(result.downloadRequest.tmdbMovieId)
         return nextIds
       })
-      setError('')
     } catch {
-      setError('Не удалось отправить запрос на загрузку.')
+      setFailedDownloadMovieId(tmdbMovieId)
     } finally {
       setRequestingMovieId(null)
     }
@@ -789,6 +903,7 @@ function App() {
     setIsTelegramSettingsOpen(true)
     setIsMenuOpen(false)
     setTelegramSettingsStatus('')
+    setTelegramChats([])
     try {
       const settings = await loadTelegramSettings()
       setTelegramConfigured(settings.configured)
@@ -832,6 +947,26 @@ function App() {
       )
     } finally {
       setIsSavingTelegramSettings(false)
+    }
+  }
+
+  const findPersonalTelegramChats = async () => {
+    setIsFindingTelegramChats(true)
+    setTelegramSettingsStatus('')
+    try {
+      const chats = await findTelegramChats(telegramBotToken.trim() || undefined)
+      setTelegramChats(chats)
+      setTelegramSettingsStatus(
+        chats.length > 0
+          ? 'Выберите чат, куда CineLibrary будет отправлять запросы.'
+          : 'Личные чаты не найдены. Откройте своего бота в Telegram и отправьте ему /start.',
+      )
+    } catch (settingsError) {
+      setTelegramSettingsStatus(
+        settingsError instanceof Error ? settingsError.message : 'Не удалось найти чат',
+      )
+    } finally {
+      setIsFindingTelegramChats(false)
     }
   }
 
@@ -926,22 +1061,30 @@ function App() {
         <section className="welcome-section">
           <CineLibraryHero />
 
-          <button
-            className="add-button"
-            onClick={() => {
-              if (isRecommending) {
-                setIsConfiguratorSummary(true)
-              } else if (!recommendationResult) {
-                setRecommendationError('')
-                setRecommendationLogs([])
-                setConfiguratorStep(0)
-                setIsConfiguratorSummary(false)
-              }
-              setIsRecommendationOpen(true)
-            }}
-          >
-            Подобрать фильмы
-          </button>
+          <div className="welcome-actions">
+            <button
+              className="library-import-button"
+              onClick={() => setIsLibraryImportOpen(true)}
+            >
+              Добавить просмотренные фильмы
+            </button>
+            <button
+              className="add-button"
+              onClick={() => {
+                if (isRecommending) {
+                  setIsConfiguratorSummary(true)
+                } else if (!recommendationResult) {
+                  setRecommendationError('')
+                  setRecommendationLogs([])
+                  setConfiguratorStep(0)
+                  setIsConfiguratorSummary(false)
+                }
+                setIsRecommendationOpen(true)
+              }}
+            >
+              Подобрать фильмы
+            </button>
+          </div>
         </section>
 
         <section className="content-section">
@@ -1061,6 +1204,143 @@ function App() {
         </section>
       </main>
 
+      {isLibraryImportOpen && (
+        <div
+          className="movie-modal-overlay"
+          onClick={() => setIsLibraryImportOpen(false)}
+        >
+          <section
+            className="movie-modal library-import-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="library-import-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="movie-modal-close"
+              onClick={() => setIsLibraryImportOpen(false)}
+              aria-label="Закрыть добавление фильмов"
+            >
+              ×
+            </button>
+            <div className="eyebrow">MOVIE LIBRARIAN 1</div>
+            <h2 id="library-import-title">Добавить просмотренные фильмы</h2>
+            <label className="library-import-field">
+              <span>Список фильмов</span>
+              <textarea
+                rows={10}
+                value={libraryImportText}
+                disabled={isLibraryImportRunning}
+                onChange={(event) => setLibraryImportText(event.target.value)}
+                placeholder="Вставьте список фильмов"
+              />
+            </label>
+
+            {libraryImportLogs.length > 0 && (
+              <div className="recommendation-log" aria-live="polite">
+                <strong>Ход добавления</strong>
+                <ol>
+                  {libraryImportLogs.map((entry) => (
+                    <li key={entry.sequence}>
+                      <time>{new Date(entry.createdAt).toLocaleTimeString('ru-RU')}</time>
+                      <span>{entry.message}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {libraryImportItems.length > 0 && (
+              <div className="library-import-results">
+                {libraryImportItems.map((item, index) => (
+                  <article key={`${item.inputText}-${index}`}>
+                    <strong>{item.title || item.inputText}</strong>
+                    <span>
+                      {item.status === 'imported' && 'Добавлен в дневник'}
+                      {item.status === 'updated' && 'Уже был в базе — отмечен просмотренным'}
+                      {item.status === 'ambiguous' && 'Не удалось однозначно определить'}
+                      {item.status === 'not_found' && 'Не найден'}
+                      {item.status === 'failed' && 'Ошибка обработки'}
+                    </span>
+                    {item.issues.length > 0 && <small>{item.issues.join(' ')}</small>}
+                    {item.status === 'ambiguous' && item.candidates.length > 0 && (
+                      <div className="library-import-candidates">
+                        <strong>Выберите подходящий вариант</strong>
+                        <div>
+                          {item.candidates.map((candidate) => {
+                            const selected = selectedImportCandidateIds.has(candidate.tmdbId)
+                            return (
+                              <label
+                                className={selected ? 'is-selected' : ''}
+                                key={candidate.tmdbId}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  disabled={isLibraryImportRunning}
+                                  onChange={() => setSelectedImportCandidateIds((currentIds) => {
+                                    const nextIds = new Set(currentIds)
+                                    if (nextIds.has(candidate.tmdbId)) {
+                                      nextIds.delete(candidate.tmdbId)
+                                    } else {
+                                      nextIds.add(candidate.tmdbId)
+                                    }
+                                    return nextIds
+                                  })}
+                                />
+                                <span>
+                                  <b>{candidate.originalTitle}</b>
+                                  <small>{candidate.releaseYear || 'Год неизвестен'}</small>
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {libraryImportError && (
+              <p className="configurator-error">{libraryImportError}</p>
+            )}
+
+            <div className="configurator-actions">
+              {isLibraryImportRunning ? (
+                <button
+                  type="button"
+                  className="configurator-stop"
+                  disabled={isStoppingLibraryImport}
+                  onClick={stopLibraryImport}
+                >
+                  {isStoppingLibraryImport ? 'Останавливаем…' : 'Прервать'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="configurator-primary"
+                  disabled={!libraryImportText.trim()}
+                  onClick={submitLibraryImport}
+                >
+                  Добавить фильмы
+                </button>
+              )}
+            </div>
+            {!isLibraryImportRunning && selectedImportCandidateIds.size > 0 && (
+              <div className="library-import-batch-action">
+                <span>Выбрано вариантов: {selectedImportCandidateIds.size}</span>
+                <button type="button" onClick={submitSelectedImportCandidates}>
+                  Добавить выбранные в каталог
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {isRecommendationOpen && (
         <div
           className="recommendation-overlay"
@@ -1093,132 +1373,24 @@ function App() {
                     ? 'Сводка запроса'
                     : 'Подбор фильмов'}
               </h2>
-              <p>
-                {recommendationResult
-                  ? 'Временный каталог: выберите фильмы, которые хотите отправить на загрузку.'
-                  : isConfiguratorSummary
-                  ? 'Проверьте ответы и при необходимости вернитесь к нужной карточке.'
-                  : `Карточка ${configuratorStep + 1} из ${configuratorCards.length}`}
-              </p>
+              {!recommendationResult && (
+                <p>
+                  {isConfiguratorSummary
+                    ? 'Проверьте ответы и при необходимости вернитесь к нужной карточке.'
+                    : `Карточка ${configuratorStep + 1} из ${configuratorCards.length}`}
+                </p>
+              )}
             </header>
 
             {recommendationResult ? (
-              <section className="temporary-recommendations">
-                {recommendationResult.movies.map((recommendation) => {
-                  const localMovie = recommendation.existingMovieId
-                    ? knownMovies.find(
-                        (movie) => movie.id === recommendation.existingMovieId,
-                      )
-                    : null
-                  const title = recommendation.movie?.title
-                    ?? localMovie?.title
-                    ?? recommendation.suggestion.title
-                  const poster = recommendation.movie?.posterUrl
-                    ?? localMovie?.poster
-                    ?? null
-                  const year = recommendation.movie?.releaseYear
-                    ?? localMovie?.year
-                    ?? recommendation.suggestion.releaseYear
-                  const overview = recommendation.movie?.overview
-                    ?? localMovie?.overview
-                    ?? ''
-                  const genres = recommendation.movie?.genres.map(
-                    (item) => item.displayName,
-                  ) ?? localMovie?.genres ?? []
-                  const canRequest = recommendation.status === 'draft_ready'
-                    || recommendation.status === 'already_exists'
-                  const isPromoted = promotedRecommendationIds.has(
-                    recommendation.id,
-                  )
-                  const isSelected = selectedRecommendationIds.has(
-                    recommendation.id,
-                  )
-
-                  return (
-                    <article key={recommendation.id}>
-                      {poster ? (
-                        <img src={poster} alt={title} />
-                      ) : (
-                        <div className="temporary-poster-fallback">Нет постера</div>
-                      )}
-                      <div className="temporary-recommendation-body">
-                        <div className="temporary-recommendation-heading">
-                          <div>
-                            <h3>{title}</h3>
-                            <p>
-                              {year || 'Год неизвестен'}
-                              {genres.length > 0 && ` · ${genres.join(', ')}`}
-                            </p>
-                          </div>
-                          <strong>
-                            {recommendation.suggestion.relevance}% релевантности
-                          </strong>
-                        </div>
-                        {overview && <p>{overview}</p>}
-                        {recommendation.people.length > 0 && (
-                          <p className="temporary-people">
-                            {recommendation.people
-                              .slice(0, 8)
-                              .map((person) => person.displayName)
-                              .join(', ')}
-                          </p>
-                        )}
-                        {recommendation.issues.length > 0 && (
-                          <p className="temporary-issues">
-                            {recommendation.issues.join(' ')}
-                          </p>
-                        )}
-                        <label className={`temporary-selection ${isSelected ? 'is-selected' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={!canRequest || isPromoted || isPromotingRecommendations}
-                            onChange={() => setSelectedRecommendationIds((currentIds) => {
-                              const nextIds = new Set(currentIds)
-                              if (nextIds.has(recommendation.id)) {
-                                nextIds.delete(recommendation.id)
-                              } else {
-                                nextIds.add(recommendation.id)
-                              }
-                              return nextIds
-                            })}
-                          />
-                          <span>
-                            {isPromoted ? 'Запрос отправлен' : 'Выбрать для загрузки'}
-                          </span>
-                        </label>
-                      </div>
-                    </article>
-                  )
-                })}
-
-                {recommendationError && (
-                  <p className="configurator-error">{recommendationError}</p>
-                )}
-
-                <div className="temporary-batch-actions">
-                  <span>Выбрано: {selectedRecommendationIds.size}</span>
-                  <button
-                    type="button"
-                    disabled={selectedRecommendationIds.size === 0 || isPromotingRecommendations}
-                    onClick={requestRecommendedMovies}
-                  >
-                    {isPromotingRecommendations
-                      ? 'Обрабатываем и отправляем…'
-                      : 'Отправить выбранные в Telegram'}
-                  </button>
-                </div>
-
-                <div className="configurator-actions">
-                  <button
-                    type="button"
-                    className="configurator-secondary"
-                    onClick={() => setRecommendationResult(null)}
-                  >
-                    Вернуться к сводке
-                  </button>
-                </div>
-              </section>
+              <RecommendationResults
+                key={recommendationResult.sessionId}
+                result={recommendationResult}
+                requestedCount={recommendationCount}
+                knownMovies={knownMovies}
+                onBack={() => setRecommendationResult(null)}
+                onDelivered={(ids) => setRequestedMovieIds((current) => new Set([...current, ...ids]))}
+              />
             ) : isConfiguratorSummary ? (
               <section className="configurator-summary">
                 {configuratorCards.map((card, index) => {
@@ -1720,6 +1892,25 @@ function App() {
                     </span>
                   )}
                 </div>
+                {selectedMovie.availability !== 'available' && selectedMovieTmdbId !== null && (
+                  <div className="movie-modal-download">
+                    <button
+                      type="button"
+                      className="movie-download-button"
+                      disabled={requestingMovieId !== null}
+                      onClick={() => submitDownloadRequest(selectedMovieTmdbId)}
+                    >
+                      {requestingMovieId === selectedMovieTmdbId
+                        ? 'Отправляем…'
+                        : 'Запросить загрузку'}
+                    </button>
+                    {failedDownloadMovieId === selectedMovieTmdbId && (
+                      <span className="movie-download-error" role="alert">
+                        Не удалось отправить запрос на загрузку. Попробуйте ещё раз.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2112,7 +2303,7 @@ function App() {
                           className="filmography-item filmography-item-link"
                           key={`${credit.tmdbMovieId}-${index}`}
                           onMouseEnter={(event) =>
-                            showFilmographyPreview(
+                            hoverFilmographyItem(
                               event.currentTarget,
                               credit,
                               localMovie,
@@ -2126,7 +2317,7 @@ function App() {
                               localMovie,
                             )
                           }
-                          onBlur={() => setFilmographyPreview(null)}
+                          onBlur={scheduleFilmographyPreviewClose}
                           onClick={() => {
                             setFilmographyPreview(null)
                             closePerson()
@@ -2144,7 +2335,7 @@ function App() {
                           className="filmography-item"
                           key={`${credit.tmdbMovieId}-${index}`}
                           onMouseEnter={(event) =>
-                            showFilmographyPreview(event.currentTarget, credit, null)
+                            hoverFilmographyItem(event.currentTarget, credit, null)
                           }
                           onMouseLeave={scheduleFilmographyPreviewClose}
                         >
@@ -2165,11 +2356,15 @@ function App() {
           className="filmography-movie-preview"
           style={{
             top: filmographyPreview.top,
+            bottom: filmographyPreview.bottom,
+            maxHeight: filmographyPreview.maxHeight,
             left: filmographyPreview.left,
             width: filmographyPreview.width,
           }}
           onMouseEnter={keepFilmographyPreviewOpen}
           onMouseLeave={scheduleFilmographyPreviewClose}
+          onFocus={keepFilmographyPreviewOpen}
+          onBlur={scheduleFilmographyPreviewClose}
         >
           {filmographyPreview.poster ? (
             <button
@@ -2233,9 +2428,9 @@ function App() {
                 !requestedMovieIds.has(filmographyPreview.tmdbMovieId) && (
                 <button
                   type="button"
-                  className="filmography-preview-download"
-                  disabled={requestingMovieId === filmographyPreview.tmdbMovieId}
-                  onClick={() => submitDownloadRequest(filmographyPreview)}
+                  className="movie-download-button"
+                  disabled={requestingMovieId !== null}
+                  onClick={() => submitDownloadRequest(filmographyPreview.tmdbMovieId)}
                 >
                   {requestingMovieId === filmographyPreview.tmdbMovieId
                     ? 'Отправляем…'
@@ -2243,7 +2438,7 @@ function App() {
                 </button>
               )}
               {requestedMovieIds.has(filmographyPreview.tmdbMovieId) && (
-                <span className="filmography-preview-requested">
+                <span className="movie-download-requested">
                   Запрос отправлен
                 </span>
               )}
@@ -2253,6 +2448,11 @@ function App() {
                 </span>
               )}
             </span>
+            {failedDownloadMovieId === filmographyPreview.tmdbMovieId && (
+              <span className="movie-download-error" role="alert">
+                Не удалось отправить запрос на загрузку. Попробуйте ещё раз.
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -2274,15 +2474,15 @@ function App() {
             >
               ×
             </button>
-            <span className="eyebrow">TELEGRAM</span>
-            <h2 id="telegram-settings-title">Настройка чат-бота</h2>
+            <span className="eyebrow">ЛИЧНЫЙ TELEGRAM-БОТ</span>
+            <h2 id="telegram-settings-title">Настройка Telegram-бота</h2>
             <p>
-              Сюда отправляются международное название фильма и имя файла с ID карточки.
+              Запросы на загрузку будут приходить в ваш личный чат с вашим ботом.
             </p>
             <ol className="telegram-setup-help">
-              <li>Создайте бота через BotFather и скопируйте выданный Bot Token.</li>
-              <li>Напишите созданному боту любое сообщение.</li>
-              <li>Укажите числовой Chat ID чата, куда отправлять запросы.</li>
+              <li>Создайте собственного бота через BotFather и скопируйте Bot Token.</li>
+              <li>Откройте этого бота в Telegram и отправьте ему команду <code>/start</code>.</li>
+              <li>Нажмите «Найти личный чат», выберите найденный чат и сохраните настройки.</li>
             </ol>
             <label>
               <span>Bot Token — токен, полученный от BotFather</span>
@@ -2294,8 +2494,31 @@ function App() {
                 autoComplete="off"
               />
             </label>
+            <button
+              type="button"
+              className="telegram-find-chat"
+              disabled={isFindingTelegramChats || (!telegramBotToken.trim() && !telegramConfigured)}
+              onClick={findPersonalTelegramChats}
+            >
+              {isFindingTelegramChats ? 'Ищем чат…' : 'Найти личный чат'}
+            </button>
+            {telegramChats.length > 0 && (
+              <div className="telegram-chat-options">
+                {telegramChats.map((chat) => (
+                  <button
+                    type="button"
+                    className={telegramChatId === chat.chatId ? 'is-selected' : ''}
+                    key={chat.chatId}
+                    onClick={() => setTelegramChatId(chat.chatId)}
+                  >
+                    <strong>{chat.label}</strong>
+                    <small>Chat ID: {chat.chatId}</small>
+                  </button>
+                ))}
+              </div>
+            )}
             <label>
-              <span>Chat ID — числовой идентификатор чата</span>
+              <span>Chat ID — числовой идентификатор вашего личного чата</span>
               <input
                 type="text"
                 value={telegramChatId}

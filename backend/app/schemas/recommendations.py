@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.schemas.movie_research import MovieCardDraft
 from app.schemas.movies import MovieRead
@@ -19,9 +19,15 @@ class ConfiguratorAnswer(StrictModel):
     skipped: bool = False
 
 
+class ReferenceMovie(StrictModel):
+    tmdb_id: int = Field(alias="tmdbId", gt=0)
+    relation: Literal["similar", "avoid"]
+
+
 class RecommendationRequest(StrictModel):
     count: int = Field(default=5, ge=1, le=10)
     answers: list[ConfiguratorAnswer] = Field(min_length=1, max_length=10)
+    references: list[ReferenceMovie] = Field(default_factory=list)
 
 
 class SuggestedMovie(StrictModel):
@@ -29,6 +35,25 @@ class SuggestedMovie(StrictModel):
     original_title: str | None = Field(default=None, alias="originalTitle")
     release_year: int | None = Field(default=None, alias="releaseYear", ge=1888, le=2200)
     relevance: int = Field(ge=0, le=100)
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
+
+
+class RecommendationMatch(StrictModel):
+    label: str = Field(min_length=1, max_length=300)
+    score: int | None = Field(default=None, ge=0, le=100)
+    detail: str = Field(default="", max_length=240)
+
+
+class GeminiSuggestedMovie(SuggestedMovie):
+    wish_matches: dict[str, list[RecommendationMatch]] = Field(default_factory=dict, alias="wishMatches")
+
+
+class RecommendationBreakdown(StrictModel):
+    chef_pick: bool = Field(alias="chefPick")
+    wish_score: int | None = Field(alias="wishScore", ge=0, le=100)
+    reference_score: int | None = Field(alias="referenceScore", ge=0, le=100)
+    matches: list[RecommendationMatch]
+    summary: str
 
 
 class TemporaryPerson(StrictModel):
@@ -41,12 +66,16 @@ class TemporaryPerson(StrictModel):
 
 class TemporaryRecommendation(StrictModel):
     id: str
+    tmdb_id: int | None = Field(default=None, alias="tmdbId")
     suggestion: SuggestedMovie
     status: Literal["draft_ready", "already_exists", "ambiguous", "not_found", "failed"]
     movie: MovieCardDraft | None
     existing_movie_id: int | None = Field(alias="existingMovieId")
     people: list[TemporaryPerson]
     issues: list[str]
+    score_explanation: str | None = Field(default=None, alias="scoreExplanation")
+    breakdown: RecommendationBreakdown | None = None
+    can_request_download: bool = Field(default=True, alias="canRequestDownload")
 
 
 class RecommendationResponse(StrictModel):
@@ -76,7 +105,7 @@ class PromoteRecommendationRequest(StrictModel):
 
 class PromoteRecommendationsRequest(StrictModel):
     recommendation_ids: list[str] = Field(
-        alias="recommendationIds", min_length=1, max_length=10
+        alias="recommendationIds", min_length=1, max_length=5
     )
 
 
@@ -90,14 +119,5 @@ class PromoteRecommendationsResponse(StrictModel):
 
 
 class GeminiRecommendationOutput(StrictModel):
-    movies: list[SuggestedMovie]
-
-    @model_validator(mode="after")
-    def unique_movies(self):
-        keys = [
-            ((movie.original_title or movie.title).casefold(), movie.release_year)
-            for movie in self.movies
-        ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("Gemini returned duplicate movies")
-        return self
+    movies: list[GeminiSuggestedMovie]
+    feature_labels: dict[int, str] = Field(default_factory=dict, alias="featureLabels")

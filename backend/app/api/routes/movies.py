@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 
-from app.clients.tmdb import TMDBConfigurationError, TMDBClient
+from app.clients.tmdb import TMDBAPIError, TMDBClient, TMDBConfigurationError
 from app.repositories.movies import (
     MovieAlreadyExistsError,
     MovieRepository,
@@ -20,14 +20,17 @@ from app.schemas.movies import (
     TasteTagRead,
     TelegramSettingsRead,
     TelegramSettingsUpdate,
+    TelegramChatDiscoveryRequest,
+    TelegramChatRead,
     TelegramTestRead,
     UserDataUpdate,
 )
 from app.services.telegram_delivery import (
+    MAX_ALBUM_FILMS,
     TelegramConfigurationError,
     TelegramDeliveryError,
 )
-from app.services.movie_download import MovieDownloadService
+from app.services.movie_download import MovieDownloadService, PartialMovieDownloadError
 from app.services.movie_card_builder import MovieCardBuilderError
 
 
@@ -160,6 +163,8 @@ def create_download_request(payload: DownloadRequestCreate, request: Request):
 def create_download_requests_by_tmdb(
     payload: TMDBDownloadRequestCreate, request: Request
 ):
+    if payload.prefer_posters and len(payload.tmdb_movie_ids) > MAX_ALBUM_FILMS:
+        raise HTTPException(status_code=422, detail=f"Выберите до {MAX_ALBUM_FILMS} фильмов.")
     try:
         tmdb = TMDBClient.from_environment()
         return MovieDownloadService(
@@ -167,9 +172,12 @@ def create_download_requests_by_tmdb(
             people=request.app.state.people_repository,
             tmdb=tmdb,
             telegram=request.app.state.telegram_delivery,
-        ).request_movies(payload.tmdb_movie_ids)
+        ).request_movies(payload.tmdb_movie_ids, prefer_posters=payload.prefer_posters)
     except (TMDBConfigurationError, TelegramConfigurationError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    except PartialMovieDownloadError as error:
+        detail = {"message": str(error), "deliveredTmdbIds": error.delivered_tmdb_ids} if payload.prefer_posters else str(error)
+        raise HTTPException(status_code=502, detail=detail) from error
     except (TMDBAPIError, TelegramDeliveryError, MovieCardBuilderError) as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
@@ -195,6 +203,22 @@ def save_telegram_settings(payload: TelegramSettingsUpdate, request: Request):
         )
     except TelegramConfigurationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post(
+    "/telegram-settings/chats",
+    response_model=list[TelegramChatRead],
+    response_model_by_alias=True,
+)
+def discover_telegram_chats(
+    payload: TelegramChatDiscoveryRequest, request: Request
+):
+    try:
+        return request.app.state.telegram_delivery.find_private_chats(payload.bot_token)
+    except TelegramConfigurationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except TelegramDeliveryError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.post(

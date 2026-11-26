@@ -78,17 +78,31 @@ class ReplicateGeminiClient:
         temperature: float = 0.2,
         max_output_tokens: int = 4096,
     ) -> Any:
-        output = self._run(
+        output = self.generate_text(
+            system_instruction, payload,
+            temperature=temperature, max_output_tokens=max_output_tokens,
+        )
+        return self._parse_json(output)
+
+    def generate_text(
+        self,
+        system_instruction: str,
+        payload: dict[str, Any],
+        *,
+        temperature: float = 0.2,
+        max_output_tokens: int = 4096,
+        thinking_level: str | None = None,
+    ) -> str:
+        return self._run(
             {
                 "prompt": json.dumps(payload, ensure_ascii=False),
                 "system_instruction": system_instruction,
-                "thinking_level": self.thinking_level,
+                "thinking_level": thinking_level if thinking_level is not None else self.thinking_level,
                 "temperature": temperature,
                 "top_p": 0.95,
                 "max_output_tokens": max_output_tokens,
             }
         )
-        return self._parse_json(output)
 
     def _run(self, model_input: dict[str, Any]) -> str:
         prediction = self._request(

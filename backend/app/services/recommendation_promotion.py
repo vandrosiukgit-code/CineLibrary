@@ -34,7 +34,11 @@ class RecommendationPromotionService:
             self._tmdb_id(session_id, recommendation_id)
             for recommendation_id in dict.fromkeys(recommendation_ids)
         ]
-        results = self.downloads.request_movies(tmdb_ids)
+        for tmdb_id in set(tmdb_ids):
+            movie = self.movies.find_by_tmdb_id(tmdb_id)
+            if movie and movie["availability"] == "available":
+                raise RecommendationPromotionError(f"«{movie['title']}» уже на диске.")
+        results = self.downloads.request_movies(tmdb_ids, prefer_posters=True)
         return [
             PromoteRecommendationResponse(
                 movie=result["movie"],

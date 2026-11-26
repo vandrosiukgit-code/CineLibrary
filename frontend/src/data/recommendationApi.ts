@@ -1,5 +1,3 @@
-import type { MovieRecord } from './movieCatalog'
-
 const API_URL = 'http://127.0.0.1:8000/api/agents/movie-recommender'
 
 export interface ConfiguratorAnswer {
@@ -9,11 +7,17 @@ export interface ConfiguratorAnswer {
   skipped: boolean
 }
 
+export interface ReferenceMovie {
+  tmdbId: number
+  relation: 'similar' | 'avoid'
+}
+
 export interface SuggestedMovie {
   title: string
   originalTitle: string | null
   releaseYear: number | null
   relevance: number
+  reason: string
 }
 
 export interface TemporaryPerson {
@@ -38,12 +42,22 @@ export interface TemporaryMovieCard {
 
 export interface TemporaryRecommendation {
   id: string
+  tmdbId?: number | null
   suggestion: SuggestedMovie
   status: 'draft_ready' | 'already_exists' | 'ambiguous' | 'not_found' | 'failed'
   movie: TemporaryMovieCard | null
   existingMovieId: number | null
   people: TemporaryPerson[]
   issues: string[]
+  scoreExplanation?: string | null
+  canRequestDownload?: boolean
+  breakdown?: {
+    chefPick: boolean
+    wishScore: number | null
+    referenceScore: number | null
+    matches: Array<{ label: string; score: number | null; detail: string }>
+    summary: string
+  } | null
 }
 
 export interface RecommendationResponse {
@@ -77,18 +91,18 @@ async function readError(response: Response, fallback: string): Promise<Error> {
 export async function startRecommendationJob(
   answers: ConfiguratorAnswer[],
   count: number,
+  references: ReferenceMovie[] = [],
 ): Promise<RecommendationJob> {
   const response = await fetch(`${API_URL}/recommend/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ answers, count }),
+    body: JSON.stringify({ answers, count, references }),
   })
   if (!response.ok) {
     throw await readError(response, 'Не удалось запустить подбор фильмов')
   }
   return (await response.json()) as RecommendationJob
 }
-
 export async function loadRecommendationJob(
   jobId: string,
 ): Promise<RecommendationJob> {
@@ -109,43 +123,4 @@ export async function cancelRecommendationJob(
     throw await readError(response, 'Не удалось остановить подбор')
   }
   return (await response.json()) as RecommendationJob
-}
-
-export async function promoteRecommendation(
-  sessionId: string,
-  recommendationId: string,
-): Promise<{ movie: MovieRecord; downloadRequestId: number }> {
-  const response = await fetch(`${API_URL}/sessions/${sessionId}/promote`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recommendationId }),
-  })
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
-      | { detail?: string }
-      | null
-    throw new Error(body?.detail || 'Не удалось отправить фильм на загрузку')
-  }
-  return (await response.json()) as {
-    movie: MovieRecord
-    downloadRequestId: number
-  }
-}
-
-export async function promoteRecommendations(
-  sessionId: string,
-  recommendationIds: string[],
-): Promise<Array<{ movie: MovieRecord; downloadRequestId: number }>> {
-  const response = await fetch(`${API_URL}/sessions/${sessionId}/promote-many`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recommendationIds }),
-  })
-  if (!response.ok) {
-    throw await readError(response, 'Не удалось отправить фильмы на загрузку')
-  }
-  const body = (await response.json()) as {
-    results: Array<{ movie: MovieRecord; downloadRequestId: number }>
-  }
-  return body.results
 }

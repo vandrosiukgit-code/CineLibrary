@@ -16,9 +16,20 @@ class RecommendationJobNotFoundError(KeyError):
 class RecommendationJobManager:
     TTL = timedelta(hours=24)
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        created_message: str = "Задача подбора создана.",
+        running_message: str = "Подбор запущен.",
+        completed_message: str = "Подбор завершён.",
+        cancelled_message: str = "Подбор остановлен пользователем.",
+    ) -> None:
         self._jobs: dict[str, dict] = {}
         self._lock = RLock()
+        self.created_message = created_message
+        self.running_message = running_message
+        self.completed_message = completed_message
+        self.cancelled_message = cancelled_message
 
     def start(
         self,
@@ -39,7 +50,7 @@ class RecommendationJobManager:
                 "cancel_event": Event(),
                 "created_at": datetime.now(timezone.utc),
             }
-            self._append_log(self._jobs[job_id], "Задача подбора создана.")
+            self._append_log(self._jobs[job_id], self.created_message)
         Thread(
             target=self._run,
             args=(job_id, runner),
@@ -73,7 +84,7 @@ class RecommendationJobManager:
         with self._lock:
             job = self._jobs[job_id]
             job["status"] = "running"
-            self._append_log(job, "Подбор запущен.")
+            self._append_log(job, self.running_message)
 
         def progress(message: str) -> None:
             with self._lock:
@@ -96,7 +107,7 @@ class RecommendationJobManager:
             with self._lock:
                 job = self._jobs[job_id]
                 job["status"] = "cancelled"
-                self._append_log(job, "Подбор остановлен пользователем.")
+                self._append_log(job, self.cancelled_message)
         except Exception as error:
             with self._lock:
                 job = self._jobs[job_id]
@@ -108,7 +119,7 @@ class RecommendationJobManager:
                 job = self._jobs[job_id]
                 job["status"] = "completed"
                 job["result"] = result
-                self._append_log(job, "Подбор завершён.")
+                self._append_log(job, self.completed_message)
 
     @staticmethod
     def _append_log(job: dict, message: str) -> None:

@@ -33,6 +33,12 @@ def create_app(
         application.state.people_repository = PeopleRepository(database)
         application.state.recommendation_sessions = RecommendationSessionStore()
         application.state.recommendation_jobs = RecommendationJobManager()
+        application.state.library_import_jobs = RecommendationJobManager(
+            created_message="Задача импорта создана.",
+            running_message="Добавление просмотренных фильмов запущено.",
+            completed_message="Добавление просмотренных фильмов завершено.",
+            cancelled_message="Добавление фильмов остановлено пользователем.",
+        )
         application.state.telegram_delivery = TelegramDeliveryService(database)
         application.state.api_credentials = APICredentialsService(database)
         application.state.api_credentials.apply_saved_credentials()

@@ -68,9 +68,9 @@ class TMDBClient:
         response = self._get("/search/movie", parameters)
         return [self._candidate(item) for item in response.get("results", [])[:10]]
 
-    def get_movie_candidate(self, tmdb_id: int) -> dict[str, Any]:
+    def get_movie_candidate(self, tmdb_id: int, *, language: str = "ru-RU") -> dict[str, Any]:
         return self._candidate(
-            self._get(f"/movie/{tmdb_id}", {"language": "ru-RU"})
+            self._get(f"/movie/{tmdb_id}", {"language": language})
         )
 
     def get_movie_bundle(self, tmdb_id: int) -> dict[str, Any]:

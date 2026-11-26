@@ -148,3 +148,38 @@ class MovieLibrarianResult(StrictModel):
 
 class MovieResearchResponse(StrictModel):
     results: list[MovieLibrarianResult]
+
+
+class MovieLibraryImportRequest(StrictModel):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class MovieLibraryImportItem(StrictModel):
+    input_text: str = Field(alias="inputText")
+    status: Literal["imported", "updated", "ambiguous", "not_found", "failed"]
+    movie_id: int | None = Field(alias="movieId")
+    title: str | None
+    issues: list[str]
+    candidates: list[IdentificationCandidate] = []
+
+
+class MovieLibraryImportResult(StrictModel):
+    items: list[MovieLibraryImportItem]
+
+
+class MovieLibraryCandidateImportRequest(StrictModel):
+    tmdb_ids: list[int] = Field(alias="tmdbIds", min_length=1, max_length=20)
+
+
+class MovieLibraryImportJobLog(StrictModel):
+    sequence: int
+    created_at: str = Field(alias="createdAt")
+    message: str
+
+
+class MovieLibraryImportJobRead(StrictModel):
+    job_id: str = Field(alias="jobId")
+    status: Literal["pending", "running", "completed", "failed", "cancelled"]
+    logs: list[MovieLibraryImportJobLog]
+    result: MovieLibraryImportResult | None = None
+    error: str | None = None

@@ -103,6 +103,11 @@ export interface TelegramSettings {
   updatedAt: string | null
 }
 
+export interface TelegramChat {
+  chatId: string
+  label: string
+}
+
 export interface APICredentialsSettings {
   replicateConfigured: boolean
   tmdbConfigured: boolean
@@ -140,6 +145,16 @@ export async function testTelegramSettings(): Promise<void> {
     method: 'POST',
   })
   if (!response.ok) throw await readApiError(response, 'Тестовое сообщение не отправлено')
+}
+
+export async function findTelegramChats(botToken?: string): Promise<TelegramChat[]> {
+  const response = await fetch(`${API_URL}/telegram-settings/chats`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(botToken ? { botToken } : {}),
+  })
+  if (!response.ok) throw await readApiError(response, 'Не удалось найти личный чат')
+  return (await response.json()) as TelegramChat[]
 }
 
 export async function loadAPICredentials(): Promise<APICredentialsSettings> {
@@ -183,15 +198,34 @@ export async function requestMovieDownload(input: {
   return (await response.json()) as DownloadRequest
 }
 
+export class DownloadDeliveryError extends Error {
+  readonly deliveredTmdbIds: number[]
+
+  constructor(message: string, deliveredTmdbIds: number[]) {
+    super(message)
+    this.deliveredTmdbIds = deliveredTmdbIds
+  }
+}
+
 export async function requestMoviesByTmdb(
   tmdbMovieIds: number[],
+  options?: { preferPosters: boolean },
 ): Promise<Array<{ movie: MovieRecord; downloadRequest: DownloadRequest }>> {
   const response = await fetch(`${API_URL}/download-requests/by-tmdb`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tmdbMovieIds }),
+    body: JSON.stringify({ tmdbMovieIds, ...options }),
   })
-  if (!response.ok) throw await readApiError(response, 'Не удалось обработать фильмы')
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as
+      | { detail?: string | { message?: string; deliveredTmdbIds?: number[] } }
+      | null
+    const detail = body?.detail
+    throw new DownloadDeliveryError(
+      (typeof detail === 'string' ? detail : detail?.message) || 'Не удалось отправить заявку',
+      typeof detail === 'object' ? detail?.deliveredTmdbIds ?? [] : [],
+    )
+  }
   return (await response.json()) as Array<{
     movie: MovieRecord
     downloadRequest: DownloadRequest
